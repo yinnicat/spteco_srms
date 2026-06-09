@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import auth
+from routers import auth, students
 
 app = FastAPI(
     title="SPTECO Student Records Management System",
@@ -17,6 +18,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(students.router)
 
 @app.get("/")
 def root():
