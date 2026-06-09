@@ -27,6 +27,7 @@ class Staff(Base):
     updated_at = Column(DateTime, server_default=func.now())
     department = relationship("Department")
     user_account = relationship("SystemUser", back_populates="staff", uselist=False)
+    module_assignments = relationship("ModuleAssignment", back_populates="lecturer")
 
 class SystemUser(Base):
     __tablename__ = "system_users"
@@ -77,6 +78,7 @@ class Student(Base):
     updated_at = Column(DateTime, server_default=func.now())
     next_of_kin = relationship("NextOfKin", back_populates="student")
     enrolments = relationship("Enrolment", back_populates="student")
+    attendance_records = relationship("Attendance", back_populates="student")
 
 class NextOfKin(Base):
     __tablename__ = "next_of_kin"
@@ -84,7 +86,7 @@ class NextOfKin(Base):
     student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
     name = Column(String(100), nullable=False)
     surname = Column(String(100), nullable=False)
-    relation = Column(String(50), nullable=False)
+    relation = Column("relationship", String(50), nullable=False)
     tel_no = Column(String(50))
     cell_no = Column(String(50))
     email = Column(String(150))
@@ -103,6 +105,7 @@ class Course(Base):
     is_active = Column(Boolean, default=True)
     department = relationship("Department")
     enrolments = relationship("Enrolment", back_populates="course")
+    modules = relationship("Module", back_populates="course")
 
 class Enrolment(Base):
     __tablename__ = "enrolments"
@@ -135,7 +138,6 @@ class Module(Base):
     __tablename__ = "modules"
     id = Column(Integer, primary_key=True, index=True)
     course_id = Column(Integer, ForeignKey("courses.id"), nullable=False)
-    lecturer_id = Column(Integer, ForeignKey("staff.id"))
     module_code = Column(String(50), nullable=False, unique=True)
     module_name = Column(String(255), nullable=False)
     required_hours = Column(Numeric(5, 2), nullable=False)
@@ -143,9 +145,21 @@ class Module(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now())
-    course = relationship("Course")
-    lecturer = relationship("Staff")
+    course = relationship("Course", back_populates="modules")
     sessions = relationship("Session", back_populates="module")
+    assignments = relationship("ModuleAssignment", back_populates="module")
+
+class ModuleAssignment(Base):
+    __tablename__ = "module_assignments"
+    id = Column(Integer, primary_key=True, index=True)
+    module_id = Column(Integer, ForeignKey("modules.id"), nullable=False)
+    lecturer_id = Column(Integer, ForeignKey("staff.id"), nullable=False)
+    academic_year = Column(String(10), nullable=False)
+    semester = Column(String(20))
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, server_default=func.now())
+    module = relationship("Module", back_populates="assignments")
+    lecturer = relationship("Staff", back_populates="module_assignments")
 
 class Session(Base):
     __tablename__ = "sessions"
@@ -157,6 +171,8 @@ class Session(Base):
     end_time = Column(Time, nullable=False)
     duration_hours = Column(Numeric(4, 2), nullable=False)
     room = Column(String(50))
+    semester = Column(String(20))
+    academic_year = Column(String(10))
     created_at = Column(DateTime, server_default=func.now())
     module = relationship("Module", back_populates="sessions")
     attendance_records = relationship("Attendance", back_populates="session")
@@ -171,7 +187,7 @@ class Attendance(Base):
     marked_at = Column(DateTime, server_default=func.now())
     notes = Column(Text)
     session = relationship("Session", back_populates="attendance_records")
-    student = relationship("Student")
+    student = relationship("Student", back_populates="attendance_records")
 
 class AuditLog(Base):
     __tablename__ = "audit_log"
