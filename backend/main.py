@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import auth, students, departments, courses, staff, enrolments, certificates, modules, attendance
+from routers import auth, students, departments, courses, staff, enrolments, certificates, modules, attendance, reports
 
 
 
@@ -27,7 +27,7 @@ app.include_router(enrolments.router)
 app.include_router(certificates.router)
 app.include_router(modules.router)
 app.include_router(attendance.router)
-
+app.include_router(reports.router)
 
 
 @app.get("/")
