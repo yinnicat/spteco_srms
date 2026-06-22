@@ -1,18 +1,54 @@
 import { Link, useNavigate } from "react-router-dom";
-import { FaUser, FaLock, FaEye } from "react-icons/fa";
+import {
+  FaUser,
+  FaLock,
+  FaEye,
+  FaEyeSlash,
+} from "react-icons/fa";
+import { useState } from "react";
 import logo from "../assets/SPTECO logo.jpg";
 
 export default function Login() {
   const navigate = useNavigate();
 
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+
   const handleLogin = (e) => {
     e.preventDefault();
+
+    const users =
+      JSON.parse(localStorage.getItem("users")) || [];
+
+    const foundUser = users.find(
+      (user) =>
+        user.username.toLowerCase() ===
+          username.trim().toLowerCase() &&
+        user.password === password &&
+        user.status === "Active"
+    );
+
+    if (!foundUser) {
+      alert("Invalid username or password");
+      return;
+    }
+
+    const loggedInUser = {
+      ...foundUser,
+      lastLogin: new Date().toLocaleString(),
+    };
+
+    localStorage.setItem(
+      "loggedInUser",
+      JSON.stringify(loggedInUser)
+    );
+
     navigate("/dashboard");
   };
 
   return (
     <div style={styles.container}>
-      {/* Left Panel */}
       <div style={styles.leftPanel}>
         <img src={logo} alt="SPTECO Logo" style={styles.logo} />
 
@@ -27,7 +63,6 @@ export default function Login() {
         </p>
       </div>
 
-      {/* Right Panel */}
       <div style={styles.rightPanel}>
         <div style={styles.formCard}>
           <h2>Welcome Back</h2>
@@ -39,18 +74,38 @@ export default function Login() {
               <input
                 type="text"
                 placeholder="Username"
+                value={username}
+                onChange={(e) =>
+                  setUsername(e.target.value)
+                }
                 style={styles.input}
+                required
               />
             </div>
 
             <div style={styles.inputGroup}>
               <FaLock />
+
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 placeholder="Password"
+                value={password}
+                onChange={(e) =>
+                  setPassword(e.target.value)
+                }
                 style={styles.input}
+                required
               />
-              <FaEye />
+
+              <button
+                type="button"
+                style={styles.eyeButton}
+                onClick={() =>
+                  setShowPassword(!showPassword)
+                }
+              >
+                {showPassword ? <FaEyeSlash /> : <FaEye />}
+              </button>
             </div>
 
             <div style={styles.options}>
@@ -145,6 +200,18 @@ const styles = {
     border: "none",
     outline: "none",
     flex: 1,
+  },
+
+  eyeButton: {
+    border: "none",
+    background: "transparent",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "0",
+    fontSize: "16px",
+    color: "#333",
   },
 
   options: {

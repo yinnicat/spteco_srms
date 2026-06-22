@@ -1,7 +1,34 @@
+import { useEffect, useState } from "react";
 import Layout from "../components/Layout";
 import { Link } from "react-router-dom";
+import { defaultStudents } from "../data/studentData";
 
 export default function Students() {
+  const [students, setStudents] = useState([]);
+  const [search, setSearch] = useState("");
+
+  const deleteStudent = (studentNo) => {
+  const updatedStudents = students.filter(
+    (student) =>
+      student.studentNo !== studentNo
+  );
+
+  localStorage.setItem(
+    "students",
+    JSON.stringify(updatedStudents)
+  );
+
+  setStudents(updatedStudents);
+};
+
+  useEffect(() => {
+    const savedStudents =
+      JSON.parse(localStorage.getItem("students")) ||
+      defaultStudents;
+
+    setStudents(savedStudents);
+  }, []);
+
   return (
     <Layout>
       <div style={styles.container}>
@@ -15,18 +42,6 @@ export default function Students() {
           </Link>
         </div>
 
-        <div style={styles.searchSection}>
-          <input
-            type="text"
-            placeholder="Search student..."
-            style={styles.searchInput}
-          />
-
-          <button style={styles.searchBtn}>
-            Search
-          </button>
-        </div>
-
         <div style={styles.tableCard}>
           <table style={styles.table}>
             <thead>
@@ -34,7 +49,6 @@ export default function Students() {
                 <th>Student No</th>
                 <th>Name</th>
                 <th>Programme</th>
-                <th>Faculty</th>
                 <th>Status</th>
                 <th>SEN</th>
                 <th>OVC</th>
@@ -43,56 +57,42 @@ export default function Students() {
             </thead>
 
             <tbody>
-              <tr>
-                <td>STU001</td>
-                <td>Kabelo Mokoena</td>
-                <td>Electrical Engineering</td>
-                <td>Engineering</td>
-                <td>Active</td>
-                <td>No</td>
-                <td>No</td>
-                <td>
-                  <Link to="/students/profile">
-                  <button style={styles.viewBtn}>
-                   View
-                   </button>
-                   </Link>
-                </td>
-              </tr>
+              {students.map((student, index) => (
+                <tr key={index}>
+                  <td>{student.studentNo}</td>
 
-              <tr>
-                <td>STU002</td>
-                <td>Neo Phiri</td>
-                <td>Business Management</td>
-                <td>Business</td>
-                <td>Active</td>
-                <td>Yes</td>
-                <td>No</td>
-                <td>
-                  <Link to="/students/profile">
+                  <td>
+                    {student.firstName} {student.lastName}
+                  </td>
+
+                  <td>{student.programme}</td>
+
+                  <td>{student.status}</td>
+
+                  <td>{student.sen}</td>
+
+                  <td>{student.ovc}</td>
+
+                 <td>
+                 <Link
+                  to={`/students/profile/${student.studentNo}`}
+                 >
                   <button style={styles.viewBtn}>
                     View
-                   </button>
-                   </Link>
-                </td>
-              </tr>
-
-              <tr>
-                <td>STU003</td>
-                <td>Boitumelo Rapopeba</td>
-                <td>Civil Engineering</td>
-                <td>Engineering</td>
-                <td>Active</td>
-                <td>No</td>
-                <td>Yes</td>
-                <td>
-                  <Link to="/students/profile">
-                  <button style={styles.viewBtn}>
-                   View
                   </button>
                   </Link>
+
+                  <button
+                    style={styles.deleteBtn}
+                      onClick={() =>
+                        deleteStudent(student.studentNo)
+                 }
+                  >
+                     Delete
+                  </button>
                 </td>
-              </tr>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -104,14 +104,11 @@ export default function Students() {
 const styles = {
   container: {
     padding: "20px",
-    background: "#f5f6fa",
-    minHeight: "100vh",
   },
 
   header: {
     display: "flex",
     justifyContent: "space-between",
-    alignItems: "center",
     marginBottom: "20px",
   },
 
@@ -124,33 +121,19 @@ const styles = {
     cursor: "pointer",
   },
 
-  searchSection: {
-    display: "flex",
-    gap: "10px",
-    marginBottom: "20px",
-  },
-
-  searchInput: {
-    flex: 1,
-    padding: "10px",
-    borderRadius: "6px",
-    border: "1px solid #ccc",
-  },
-
-  searchBtn: {
-    padding: "10px 20px",
-    border: "none",
-    background: "#111827",
-    color: "#fff",
-    borderRadius: "6px",
-    cursor: "pointer",
-  },
+  deleteBtn: {
+  background: "red",
+  color: "#fff",
+  border: "none",
+  padding: "8px 12px",
+  marginLeft: "10px",
+  borderRadius: "5px",
+},
 
   tableCard: {
     background: "#fff",
     borderRadius: "10px",
     padding: "20px",
-    boxShadow: "0 1px 4px rgba(0,0,0,0.1)",
   },
 
   table: {
@@ -162,8 +145,7 @@ const styles = {
     background: "#2563eb",
     color: "#fff",
     border: "none",
-    padding: "6px 12px",
+    padding: "8px 12px",
     borderRadius: "5px",
-    cursor: "pointer",
   },
 };

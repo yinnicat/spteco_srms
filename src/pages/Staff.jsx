@@ -1,30 +1,205 @@
 import Layout from "../components/Layout";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import {
+  FaChalkboardTeacher,
+  FaUserPlus,
+  FaSearch,
+} from "react-icons/fa";
 
 export default function Staff() {
+  const defaultStaff = [
+    {
+      id: "EMP001",
+      name: "John Smith",
+      department: "Engineering",
+      position: "Lecturer",
+      status: "Active",
+    },
+    {
+      id: "EMP002",
+      name: "Mary Jones",
+      department: "Business",
+      position: "HOD",
+      status: "Active",
+    },
+  ];
+
+  const [staff, setStaff] = useState([]);
+
+  const [search, setSearch] = useState("");
+
+  const [newStaff, setNewStaff] = useState({
+    id: "",
+    name: "",
+    department: "",
+    position: "",
+  });
+
+  useEffect(() => {
+    const savedStaff =
+      JSON.parse(localStorage.getItem("staff")) ||
+      defaultStaff;
+
+    setStaff(savedStaff);
+  }, []);
+
+  const addStaff = () => {
+    if (
+      !newStaff.id ||
+      !newStaff.name ||
+      !newStaff.department ||
+      !newStaff.position
+    ) {
+      alert("Please fill all fields");
+      return;
+    }
+
+    const updatedStaff = [
+      ...staff,
+      {
+        ...newStaff,
+        status: "Active",
+      },
+    ];
+
+    setStaff(updatedStaff);
+
+    localStorage.setItem(
+      "staff",
+      JSON.stringify(updatedStaff)
+    );
+
+    setNewStaff({
+      id: "",
+      name: "",
+      department: "",
+      position: "",
+    });
+  };
+
+  const filteredStaff = staff.filter((member) =>
+    member.name
+      .toLowerCase()
+      .includes(search.toLowerCase())
+  );
+
   return (
     <Layout>
       <div style={styles.container}>
         <div style={styles.header}>
-          <h1>Staff Management</h1>
+          <div>
+            <h1>Staff Management</h1>
 
-          <Link to="/staff/add">
-            <button style={styles.addBtn}>
-              + Add Staff
-            </button>
-          </Link>
+            <p>
+              Manage lecturers and staff members
+            </p>
+          </div>
+
+          <div style={styles.headerIcon}>
+            <FaChalkboardTeacher />
+          </div>
         </div>
 
-        <div style={styles.searchSection}>
-          <input
-            type="text"
-            placeholder="Search staff..."
-            style={styles.searchInput}
-          />
+        <div style={styles.stats}>
+          <div style={styles.statCard}>
+            <h3>Total Staff</h3>
 
-          <button style={styles.searchBtn}>
-            Search
-          </button>
+            <h1>{staff.length}</h1>
+          </div>
+
+          <div style={styles.statCard}>
+            <h3>Departments</h3>
+
+            <h1>6</h1>
+          </div>
+
+          <div style={styles.statCard}>
+            <h3>Active Staff</h3>
+
+            <h1>
+              {
+                staff.filter(
+                  (s) =>
+                    s.status === "Active"
+                ).length
+              }
+            </h1>
+          </div>
+        </div>
+
+        <div style={styles.addCard}>
+          <h2>Add Staff</h2>
+
+          <div style={styles.form}>
+            <input
+              placeholder="Staff ID"
+              value={newStaff.id}
+              onChange={(e) =>
+                setNewStaff({
+                  ...newStaff,
+                  id: e.target.value,
+                })
+              }
+            />
+
+            <input
+              placeholder="Full Name"
+              value={newStaff.name}
+              onChange={(e) =>
+                setNewStaff({
+                  ...newStaff,
+                  name: e.target.value,
+                })
+              }
+            />
+
+            <input
+              placeholder="Department"
+              value={newStaff.department}
+              onChange={(e) =>
+                setNewStaff({
+                  ...newStaff,
+                  department:
+                    e.target.value,
+                })
+              }
+            />
+
+            <input
+              placeholder="Position"
+              value={newStaff.position}
+              onChange={(e) =>
+                setNewStaff({
+                  ...newStaff,
+                  position:
+                    e.target.value,
+                })
+              }
+            />
+
+            <button
+              style={styles.addBtn}
+              onClick={addStaff}
+            >
+              <FaUserPlus />
+
+              Add Staff
+            </button>
+          </div>
+        </div>
+
+        <div style={styles.searchBox}>
+          <FaSearch />
+
+          <input
+            placeholder="Search Staff"
+            value={search}
+            onChange={(e) =>
+              setSearch(
+                e.target.value
+              )
+            }
+          />
         </div>
 
         <div style={styles.tableCard}>
@@ -32,47 +207,57 @@ export default function Staff() {
             <thead>
               <tr>
                 <th>Staff ID</th>
+
                 <th>Name</th>
+
                 <th>Department</th>
+
                 <th>Position</th>
-                <th>Email</th>
+
                 <th>Status</th>
-                <th>Action</th>
               </tr>
             </thead>
 
             <tbody>
-              <tr>
-                <td>EMP001</td>
-                <td>John Smith</td>
-                <td>Engineering</td>
-                <td>Lecturer</td>
-                <td>john@spteco.ac.bw</td>
-                <td>Active</td>
-                <td>
-                  <Link to="/staff/profile">
-                    <button style={styles.viewBtn}>
-                      View
-                    </button>
-                  </Link>
-                </td>
-              </tr>
+              {filteredStaff.map(
+                (member) => (
+                  <tr
+                    key={member.id}
+                  >
+                    <td>
+                      {member.id}
+                    </td>
 
-              <tr>
-                <td>EMP002</td>
-                <td>Mary Dube</td>
-                <td>Business</td>
-                <td>HOD</td>
-                <td>mary@spteco.ac.bw</td>
-                <td>Active</td>
-                <td>
-                  <Link to="/staff/profile">
-                    <button style={styles.viewBtn}>
-                      View
-                    </button>
-                  </Link>
-                </td>
-              </tr>
+                    <td>
+                      {member.name}
+                    </td>
+
+                    <td>
+                      {
+                        member.department
+                      }
+                    </td>
+
+                    <td>
+                      {
+                        member.position
+                      }
+                    </td>
+
+                    <td>
+                      <span
+                        style={
+                          styles.badge
+                        }
+                      >
+                        {
+                          member.status
+                        }
+                      </span>
+                    </td>
+                  </tr>
+                )
+              )}
             </tbody>
           </table>
         </div>
@@ -84,65 +269,112 @@ export default function Staff() {
 const styles = {
   container: {
     padding: "20px",
-    background: "#f5f6fa",
-    minHeight: "100vh",
   },
 
   header: {
     display: "flex",
-    justifyContent: "space-between",
+
+    justifyContent:
+      "space-between",
+
     alignItems: "center",
+
     marginBottom: "20px",
+  },
+
+  headerIcon: {
+    fontSize: "50px",
+
+    color: "#2563eb",
+  },
+
+  stats: {
+    display: "grid",
+
+    gridTemplateColumns:
+      "repeat(3,1fr)",
+
+    gap: "20px",
+
+    marginBottom: "20px",
+  },
+
+  statCard: {
+    background: "#fff",
+
+    padding: "20px",
+
+    borderRadius: "10px",
+  },
+
+  addCard: {
+    background: "#fff",
+
+    padding: "20px",
+
+    borderRadius: "10px",
+
+    marginBottom: "20px",
+  },
+
+  form: {
+    display: "grid",
+
+    gridTemplateColumns:
+      "repeat(5,1fr)",
+
+    gap: "15px",
   },
 
   addBtn: {
     background: "#2563eb",
+
     color: "#fff",
+
     border: "none",
-    padding: "10px 15px",
-    borderRadius: "6px",
+
+    borderRadius: "8px",
+
     cursor: "pointer",
   },
 
-  searchSection: {
+  searchBox: {
+    background: "#fff",
+
     display: "flex",
+
     gap: "10px",
+
+    alignItems: "center",
+
+    padding: "15px",
+
+    borderRadius: "10px",
+
     marginBottom: "20px",
-  },
-
-  searchInput: {
-    flex: 1,
-    padding: "10px",
-    border: "1px solid #ccc",
-    borderRadius: "6px",
-  },
-
-  searchBtn: {
-    background: "#111827",
-    color: "#fff",
-    border: "none",
-    padding: "10px 20px",
-    borderRadius: "6px",
   },
 
   tableCard: {
     background: "#fff",
-    padding: "20px",
+
     borderRadius: "10px",
-    boxShadow: "0 1px 4px rgba(0,0,0,0.1)",
+
+    padding: "20px",
   },
 
   table: {
     width: "100%",
+
     borderCollapse: "collapse",
   },
 
-  viewBtn: {
-    background: "#2563eb",
-    color: "#fff",
-    border: "none",
+  badge: {
+    background: "#dcfce7",
+
+    color: "#166534",
+
     padding: "6px 12px",
-    borderRadius: "5px",
-    cursor: "pointer",
+
+    borderRadius: "20px",
   },
 };
