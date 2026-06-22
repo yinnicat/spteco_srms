@@ -1,12 +1,10 @@
 import { Link, useLocation } from "react-router-dom";
-
 import {
   FaHome,
   FaUserGraduate,
   FaChalkboardTeacher,
   FaBook,
   FaClipboardList,
-  FaCalendarCheck,
   FaCertificate,
   FaFileAlt,
   FaUsers,
@@ -17,100 +15,27 @@ import {
 export default function Sidebar() {
   const location = useLocation();
 
-  const loggedInUser = JSON.parse(
-    localStorage.getItem("loggedInUser")
-  );
-
-  const role = loggedInUser?.role;
-
-  const allMenuItems = [
-    {
-      name: "Dashboard",
-      icon: <FaHome />,
-      path: "/dashboard",
-      roles: ["Database Admin", "Admin Staff", "Lecturer"],
-    },
-    {
-      name: "Students",
-      icon: <FaUserGraduate />,
-      path: "/students",
-      roles: ["Database Admin", "Admin Staff", "Lecturer"],
-    },
-    {
-      name: "Staff",
-      icon: <FaChalkboardTeacher />,
-      path: "/staff",
-      roles: ["Database Admin", "Admin Staff"],
-    },
-    {
-      name: "Courses",
-      icon: <FaBook />,
-      path: "/courses",
-      roles: ["Database Admin", "Admin Staff", "Lecturer"],
-    },
-    {
-      name: "Enrolments",
-      icon: <FaClipboardList />,
-      path: "/enrolments",
-      roles: ["Database Admin", "Admin Staff"],
-    },
-    {
-      name: "Attendance",
-      icon: <FaCalendarCheck />,
-      path: "/attendance",
-      roles: ["Database Admin", "Admin Staff", "Lecturer"],
-    },
-    {
-      name: "Certificates",
-      icon: <FaCertificate />,
-      path: "/certificates",
-      roles: ["Database Admin", "Admin Staff"],
-    },
-    {
-      name: "Reports",
-      icon: <FaFileAlt />,
-      path: "/reports",
-      roles: ["Database Admin", "Admin Staff", "Lecturer"],
-    },
-    {
-      name: "Users",
-      icon: <FaUsers />,
-      path: "/users",
-      roles: ["Database Admin"],
-    },
-    {
-      name: "Data Migration",
-      icon: <FaDatabase />,
-      path: "/migration",
-      roles: ["Database Admin"],
-    },
-    {
-      name: "Settings",
-      icon: <FaCog />,
-      path: "/settings",
-      roles: ["Database Admin"],
-    },
+  const menuItems = [
+    { name: "Dashboard", icon: <FaHome />, path: "/dashboard" },
+    { name: "Students", icon: <FaUserGraduate />, path: "/students" },
+    { name: "Staff", icon: <FaChalkboardTeacher />, path: "/staff" },
+    { name: "Courses", icon: <FaBook />, path: "/courses" },
+    { name: "Enrolments", icon: <FaClipboardList />, path: "/enrolments" },
+    { name: "Certificates", icon: <FaCertificate />, path: "/certificates" },
+    { name: "Reports", icon: <FaFileAlt />, path: "/reports" },
+    { name: "Users", icon: <FaUsers />, path: "/users" },
+    { name: "Data Migration", icon: <FaDatabase />, path: "/migration" },
+    { name: "Settings", icon: <FaCog />, path: "/settings" },
   ];
-
-  const menuItems = allMenuItems.filter((item) =>
-    item.roles.includes(role)
-  );
 
   return (
     <div style={styles.sidebar}>
       <div style={styles.logo}>
         <h2>SPTECO</h2>
-        <p>SRMS</p>
-
-        {loggedInUser && (
-          <div style={styles.userBox}>
-            <strong>{loggedInUser.fullname}</strong>
-            <span>{loggedInUser.role}</span>
-          </div>
-        )}
+        <p style={{ fontSize: "12px" }}>SRMS</p>
       </div>
 
-      <div>
+      <div style={styles.menu}>
         {menuItems.map((item) => (
           <Link
             key={item.path}
@@ -121,10 +46,6 @@ export default function Sidebar() {
                 location.pathname === item.path
                   ? "#e8f0ff"
                   : "transparent",
-              color:
-                location.pathname === item.path
-                  ? "#1e3a8a"
-                  : "#333",
             }}
           >
             {item.icon}
@@ -139,9 +60,12 @@ export default function Sidebar() {
 const styles = {
   sidebar: {
     width: "250px",
-    background: "#fff",
+    height: "100vh",
+    background: "#ffffff",
     borderRight: "1px solid #ddd",
-    minHeight: "100vh",
+    position: "fixed",
+    left: 0,
+    top: 0,
   },
 
   logo: {
@@ -149,25 +73,21 @@ const styles = {
     borderBottom: "1px solid #ddd",
   },
 
-  userBox: {
-    marginTop: "15px",
-    padding: "10px",
-    background: "#f5f6fa",
-    borderRadius: "8px",
+  menu: {
     display: "flex",
     flexDirection: "column",
-    gap: "4px",
-    fontSize: "13px",
+    padding: "10px",
   },
 
   link: {
     display: "flex",
-    gap: "10px",
     alignItems: "center",
-    padding: "12px 20px",
+    gap: "10px",
+    padding: "12px",
+    marginBottom: "5px",
+    borderRadius: "8px",
     textDecoration: "none",
-    margin: "5px",
-    borderRadius: "6px",
+    color: "#333",
     fontWeight: "500",
   },
 };

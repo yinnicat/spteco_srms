@@ -1,39 +1,24 @@
-import { useEffect } from "react";
-
-import { useNavigate } from "react-router-dom";
-
 import Sidebar from "./Sidebar";
-
 import Topbar from "./Topbar";
 
-export default function Layout({
-  children,
-}) {
-  const navigate =
-    useNavigate();
-
-  useEffect(() => {
-    const user =
-      JSON.parse(
-        localStorage.getItem(
-          "loggedInUser"
-        )
-      );
-
-    if (!user) {
-      navigate("/");
-    }
-  }, [navigate]);
-
+export default function Layout({ children }) {
   return (
-    <div style={styles.wrapper}>
+    <div>
       <Sidebar />
 
-      <div style={styles.main}>
+      <div
+        style={{
+          marginLeft: "250px",
+        }}
+      >
         <Topbar />
 
         <div
-          style={styles.content}
+          style={{
+            padding: "20px",
+            background: "#f5f6fa",
+            minHeight: "calc(100vh - 70px)",
+          }}
         >
           {children}
         </div>
@@ -41,31 +26,3 @@ export default function Layout({
     </div>
   );
 }
-
-const styles = {
-  wrapper: {
-    display: "flex",
-
-    minHeight: "100vh",
-
-    background:
-      "#f3f6fb",
-  },
-
-  main: {
-    flex: 1,
-
-    display: "flex",
-
-    flexDirection:
-      "column",
-  },
-
-  content: {
-    flex: 1,
-
-    padding: "25px",
-
-    overflowY: "auto",
-  },
-};
