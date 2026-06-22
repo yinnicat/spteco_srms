@@ -1,7 +1,7 @@
 -- ============================================================================
 -- SELEBI-PHIKWE TECHNICAL COLLEGE (SPTECO)
 -- STUDENT RECORDS MANAGEMENT SYSTEM (SRMS) - PRODUCTION MASTER SCHEMA
--- POSTGRESQL COMPATIBLE | VERSION 5.0 | JUNE 2026
+-- POSTGRESQL COMPATIBLE | VERSION 6.0 | JUNE 2026
 -- ============================================================================
 
 -- ============================================================================
@@ -227,16 +227,15 @@ CREATE TABLE certificate_issuance (
 CREATE TABLE modules (
     id SERIAL PRIMARY KEY,
     course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE RESTRICT,
-    lecturer_id INTEGER NULL REFERENCES staff(id) ON DELETE SET NULL,
     module_code VARCHAR(50) NOT NULL UNIQUE, -- Format Example: 'AM-01' (Engine Maintenance)
     module_name VARCHAR(255) NOT NULL,
     required_hours NUMERIC(5,2) NOT NULL,
-    attendance_threshold NUMERIC(5,2) NOT NULL, -- Min hours student must attend before flagged at-risk. Set during creation. Default = 80% of required_hours.
+    attendance_threshold NUMERIC(5,2) NOT NULL, -- Min hours student must attend. Set during creation. Default = 80% of required_hours.
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     
-    -- Sanity Constraint
+    -- Sanity Constraints
     CONSTRAINT chk_modules_hours_positive CHECK (required_hours > 0),
     CONSTRAINT chk_attendance_threshold_positive CHECK (attendance_threshold > 0),
     CONSTRAINT chk_threshold_lte_required CHECK (attendance_threshold <= required_hours)
@@ -256,11 +255,27 @@ CREATE TABLE sessions (
     end_time TIME NOT NULL,
     duration_hours NUMERIC(4,2) NOT NULL, -- Precise validation left to application logic
     room VARCHAR(50) NULL,
+    semester VARCHAR(20) NULL,
+    academic_year VARCHAR(10) NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     
     -- Timeline Integrity Constraints
     CONSTRAINT chk_session_time_order CHECK (end_time > start_time),
     CONSTRAINT chk_session_duration_positive CHECK (duration_hours > 0)
+);
+
+
+-- 10.1 MODULE ASSIGNMENTS TABLE (Lecturer-Module History)
+CREATE TABLE module_assignments (
+    id SERIAL PRIMARY KEY,
+    module_id INTEGER NOT NULL REFERENCES modules(id) ON DELETE RESTRICT,
+    lecturer_id INTEGER NOT NULL REFERENCES staff(id) ON DELETE RESTRICT,
+    academic_year VARCHAR(10) NOT NULL,
+    semester VARCHAR(20) NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT chk_academic_year_format CHECK (academic_year ~ '^[0-9]{4}$')
 );
 
 -- 11. ATTENDANCE TABLE
@@ -318,7 +333,8 @@ CREATE INDEX idx_students_student_no ON students(student_no);
 CREATE INDEX idx_students_omang ON students(omang);
 CREATE INDEX idx_certificate_enrolment ON certificate_issuance(enrolment_id);
 CREATE INDEX idx_modules_course ON modules(course_id);
-CREATE INDEX idx_modules_lecturer ON modules(lecturer_id);
+CREATE INDEX idx_module_assignments_module ON module_assignments(module_id);
+CREATE INDEX idx_module_assignments_lecturer ON module_assignments(lecturer_id);
 CREATE INDEX idx_staff_department ON staff(department_id);
 CREATE INDEX idx_students_email ON students(email);
 CREATE INDEX idx_staff_email ON staff(email);
