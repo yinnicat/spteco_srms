@@ -6,20 +6,37 @@ from routers.auth import get_current_user, require_roles
 import models
 from pydantic import BaseModel
 from typing import Optional, List
-from datetime import date, time
+from datetime import date, time, datetime
 from decimal import Decimal
 
 router = APIRouter(prefix="/attendance", tags=["Attendance"])
+
+VALID_SEMESTERS = ["Semester 1", "Semester 2", "Inter-semester"]
+
+def get_semester_and_year(session_date: date):
+    month = session_date.month
+    year = session_date.year
+    if month >= 7:
+        academic_year = f"{year}/{year + 1}"
+        semester = "Semester 1"
+    else:
+        academic_year = f"{year - 1}/{year}"
+        semester = "Semester 2"
+    return semester, academic_year
+
+def calculate_duration(start: time, end: time) -> float:
+    start_dt = datetime.combine(date.today(), start)
+    end_dt = datetime.combine(date.today(), end)
+    diff = (end_dt - start_dt).seconds / 3600
+    return round(diff, 2)
 
 class SessionCreate(BaseModel):
     module_id: int
     date: date
     start_time: time
     end_time: time
-    duration_hours: Decimal
     room: Optional[str] = None
-    semester: Optional[str] = None
-    academic_year: Optional[str] = None
+    semester: Optional[str] = None  # Override — if not provided, auto-detected
 
 class AttendanceRecord(BaseModel):
     student_id: int
@@ -74,10 +91,28 @@ def create_session(
     module = db.query(models.Module).filter(models.Module.id == data.module_id).first()
     if not module:
         raise HTTPException(status_code=404, detail="Module not found")
-    if data.academic_year and (not data.academic_year.isdigit() or len(data.academic_year) != 4):
-        raise HTTPException(status_code=400, detail="Academic year must be a 4-digit year e.g. 2026")
+    if data.end_time <= data.start_time:
+        raise HTTPException(status_code=400, detail="End time must be after start time")
+
+    # Auto-detect semester and academic year from date
+    auto_semester, auto_academic_year = get_semester_and_year(data.date)
+
+    # Allow override for semester only
+    final_semester = data.semester if data.semester else auto_semester
+    if final_semester not in VALID_SEMESTERS:
+        raise HTTPException(status_code=400, detail=f"Semester must be one of {VALID_SEMESTERS}")
+
+    duration = calculate_duration(data.start_time, data.end_time)
+
     session = models.Session(
-        **data.dict(),
+        module_id=data.module_id,
+        date=data.date,
+        start_time=data.start_time,
+        end_time=data.end_time,
+        duration_hours=duration,
+        room=data.room,
+        semester=final_semester,
+        academic_year=auto_academic_year,
         marked_by=current_user.staff_id
     )
     db.add(session)
@@ -98,6 +133,46 @@ def delete_session(
     db.commit()
     return {"message": "Session deleted. All attendance records for this session have been removed."}
 
+@router.get("/sessions/{session_id}/students")
+def get_students_for_session(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.SystemUser = Depends(get_current_user)
+):
+    session = db.query(models.Session).filter(models.Session.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    # Get all students enrolled in this module's course
+    students = db.query(models.Student).join(
+        models.Enrolment, models.Enrolment.student_id == models.Student.id
+    ).filter(
+        models.Enrolment.course_id == session.module.course_id,
+        models.Enrolment.status == "Active"
+    ).all()
+    
+    # Check if attendance already marked for each student
+    existing_attendance = db.query(models.Attendance).filter(
+        models.Attendance.session_id == session_id
+    ).all()
+    attendance_map = {a.student_id: a.status for a in existing_attendance}
+    
+    return {
+        "session_id": session_id,
+        "module_name": session.module.module_name,
+        "date": session.date,
+        "semester": session.semester,
+        "academic_year": session.academic_year,
+        "already_marked": len(existing_attendance) > 0,
+        "students": [
+            {
+                "student_id": s.id,
+                "student_no": s.student_no,
+                "student_name": f"{s.first_name} {s.last_name}",
+                "current_status": attendance_map.get(s.id, "Absent"),
+            } for s in students
+        ]
+    }
 # ─── Attendance ────────────────────────────────────────────────────────────────
 
 @router.post("/sessions/{session_id}/mark", status_code=status.HTTP_201_CREATED)
@@ -183,7 +258,6 @@ def get_attendance_summary(
         session_query = session_query.filter(models.Session.academic_year == academic_year)
     sessions = session_query.all()
     session_ids = [s.id for s in sessions]
-    total_sessions = len(sessions)
     total_hours = sum(float(s.duration_hours) for s in sessions)
     attended = db.query(models.Attendance).filter(
         models.Attendance.session_id.in_(session_ids),
@@ -204,7 +278,7 @@ def get_attendance_summary(
         "module_name": module.module_name,
         "semester": semester,
         "academic_year": academic_year,
-        "total_sessions": total_sessions,
+        "total_sessions": len(sessions),
         "total_hours": total_hours,
         "hours_attended": hours_attended,
         "attendance_percentage": percentage,
