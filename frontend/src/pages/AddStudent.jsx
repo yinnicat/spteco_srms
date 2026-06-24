@@ -1,213 +1,255 @@
-import Layout from "../components/Layout";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import Layout from "../components/Layout";
+import { apiFetch } from "../api";
 
 export default function AddStudent() {
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const [student, setStudent] = useState({
-    studentNo: "",
-    firstName: "",
-    lastName: "",
-    dob: "",
+    first_name: "",
+    other_name: "",
+    last_name: "",
     gender: "",
+    dob: "",
+    place_of_birth: "",
+    nationality: "Motswana",
     omang: "",
-    nationality: "Botswana",
-    phone: "",
+    passport: "",
     email: "",
+    tel_no: "",
+    cell_no: "",
     address: "",
-    faculty: "",
-    programme: "",
-    level: "",
-    admissionDate: "",
-    sen: "",
-    ovc: "",
-    nextOfKin: "",
-    nextOfKinPhone: "",
-    status: "",
+    admission_date: "",
+    academic_qualifications: "",
+    prof_qualification: "",
+    disability: "",
+    sen: false,
+    ovc: false,
+    english_grade: "",
+    maths_grade: "",
+    science_grade: "",
+    technology_grade: "",
+    technical_maths_grade: "",
+    technical_drawing_grade: "",
+    practical_grade: "",
+    associated_studies_grade: "",
+    other_subjects_summary: "",
+    relevant_experience: "",
+  });
+
+  const [nok, setNok] = useState({
+    name: "",
+    surname: "",
+    relation: "",
+    tel_no: "",
+    cell_no: "",
+    email: "",
   });
 
   const handleChange = (e) => {
-    setStudent({
-      ...student,
-      [e.target.name]: e.target.value,
-    });
+    const { name, value, type, checked } = e.target;
+    setStudent({ ...student, [name]: type === "checkbox" ? checked : value });
   };
 
-  const saveStudent = (e) => {
+  const handleNokChange = (e) => {
+    setNok({ ...nok, [e.target.name]: e.target.value });
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-
-    const existingStudents =
-      JSON.parse(localStorage.getItem("students")) || [];
-
-    const studentExists = existingStudents.some(
-      (item) =>
-        item.studentNo.toLowerCase() === student.studentNo.toLowerCase()
-    );
-
-    if (studentExists) {
-      alert("Student number already exists");
-      return;
+    setError("");
+    setLoading(true);
+    try {
+      const payload = {
+        ...student,
+        dob: student.dob || null,
+        admission_date: student.admission_date || null,
+        next_of_kin: nok.name ? nok : null,
+      };
+      const response = await apiFetch("/students/", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.detail || "Failed to add student.");
+        return;
+      }
+      navigate("/students");
+    } catch {
+      setError("Could not connect to server.");
+    } finally {
+      setLoading(false);
     }
-
-    const newStudent = {
-      ...student,
-      name: `${student.firstName} ${student.lastName}`,
-    };
-
-    localStorage.setItem(
-      "students",
-      JSON.stringify([...existingStudents, newStudent])
-    );
-
-    alert("Student saved successfully");
-    navigate("/students");
   };
+
+  const field = (label, name, type = "text", required = false) => (
+    <div style={styles.group}>
+      <label style={styles.label}>{label}{required && " *"}</label>
+      <input
+        type={type}
+        name={name}
+        value={student[name]}
+        onChange={handleChange}
+        style={styles.input}
+        required={required}
+      />
+    </div>
+  );
+
+ const gradeField = (label, name) => (
+  <div style={styles.group}>
+    <label style={styles.label}>{label}</label>
+    <input
+      type="text"
+      name={name}
+      value={student[name]}
+      onChange={handleChange}
+      style={styles.input}
+      placeholder="e.g. B or 75"
+    />
+  </div>
+);
 
   return (
     <Layout>
       <div style={styles.container}>
-        <div style={styles.header}>
-          <h1>Add Student</h1>
-          <p>Register a new student into the Student Records Management System</p>
+        <div style={styles.topBar}>
+          <div>
+            <h1>Add Student</h1>
+            <p style={{ color: "#6b7280" }}>Register a new student. Student number is auto-generated.</p>
+          </div>
+          <button style={styles.backBtn} onClick={() => navigate("/students")}>← Back</button>
         </div>
 
-        <form onSubmit={saveStudent} style={styles.card}>
-          <div style={styles.form}>
-            <div style={styles.group}>
-              <label>Student Number</label>
-              <input name="studentNo" value={student.studentNo} onChange={handleChange} type="text" placeholder="STU0034/1256" style={styles.input} required />
-            </div>
+        {error && <div style={styles.errorBox}>{error}</div>}
 
-            <div style={styles.group}>
-              <label>First Name</label>
-              <input name="firstName" value={student.firstName} onChange={handleChange} type="text" placeholder="First Name" style={styles.input} required />
-            </div>
+        <form onSubmit={handleSubmit}>
 
-            <div style={styles.group}>
-              <label>Last Name</label>
-              <input name="lastName" value={student.lastName} onChange={handleChange} type="text" placeholder="Last Name" style={styles.input} required />
-            </div>
-
-            <div style={styles.group}>
-              <label>Date of Birth</label>
-              <input name="dob" value={student.dob} onChange={handleChange} type="date" style={styles.input} required />
-            </div>
-
-            <div style={styles.group}>
-              <label>Gender</label>
-              <select name="gender" value={student.gender} onChange={handleChange} style={styles.input} required>
-                <option value="">Select Gender</option>
-                <option value="Male">Male</option>
-                <option value="Female">Female</option>
-              </select>
-            </div>
-
-            <div style={styles.group}>
-              <label>National ID / Omang</label>
-              <input name="omang" value={student.omang} onChange={handleChange} type="text" placeholder="Identity Number" style={styles.input} required />
-            </div>
-
-            <div style={styles.group}>
-              <label>Nationality</label>
-              <input name="nationality" value={student.nationality} onChange={handleChange} type="text" placeholder="Botswana" style={styles.input} required />
-            </div>
-
-            <div style={styles.group}>
-              <label>Phone Number</label>
-              <input name="phone" value={student.phone} onChange={handleChange} type="text" placeholder="Phone Number" style={styles.input} required />
-            </div>
-
-            <div style={styles.group}>
-              <label>Email Address</label>
-              <input name="email" value={student.email} onChange={handleChange} type="email" placeholder="student@email.com" style={styles.input} />
-            </div>
-
-            <div style={styles.group}>
-              <label>Address</label>
-              <input name="address" value={student.address} onChange={handleChange} type="text" placeholder="Selebi-Phikwe" style={styles.input} required />
-            </div>
-
-            <div style={styles.group}>
-              <label>Faculty</label>
-              <select name="faculty" value={student.faculty} onChange={handleChange} style={styles.input} required>
-                <option value="">Select Faculty</option>
-                <option value="Engineering">Engineering</option>
-                <option value="Business">Business</option>
-                <option value="ICT">ICT</option>
-              </select>
-            </div>
-
-            <div style={styles.group}>
-              <label>Programme</label>
-              <select name="programme" value={student.programme} onChange={handleChange} style={styles.input} required>
-                <option value="">Select Programme</option>
-                <option value="Electrical Engineering">Electrical Engineering</option>
-                <option value="Civil Engineering">Civil Engineering</option>
-                <option value="Business Management">Business Management</option>
-              </select>
-            </div>
-
-            <div style={styles.group}>
-              <label>Level</label>
-              <select name="level" value={student.level} onChange={handleChange} style={styles.input} required>
-                <option value="">Select Level</option>
-                <option value="N4">N4</option>
-                <option value="N5">N5</option>
-                <option value="N6">N6</option>
-              </select>
-            </div>
-
-            <div style={styles.group}>
-              <label>Admission Date</label>
-              <input name="admissionDate" value={student.admissionDate} onChange={handleChange} type="date" style={styles.input} required />
-            </div>
-
-            <div style={styles.group}>
-              <label>SEN Status</label>
-              <select name="sen" value={student.sen} onChange={handleChange} style={styles.input} required>
-                <option value="">Select SEN Status</option>
-                <option value="Yes">Yes</option>
-                <option value="No">No</option>
-              </select>
-            </div>
-
-            <div style={styles.group}>
-              <label>OVC Status</label>
-              <select name="ovc" value={student.ovc} onChange={handleChange} style={styles.input} required>
-                <option value="">Select OVC Status</option>
-                <option value="Yes">Yes</option>
-                <option value="No">No</option>
-              </select>
-            </div>
-
-            <div style={styles.group}>
-              <label>Next of Kin</label>
-              <input name="nextOfKin" value={student.nextOfKin} onChange={handleChange} type="text" placeholder="Next of Kin Name" style={styles.input} required />
-            </div>
-
-            <div style={styles.group}>
-              <label>Next of Kin Phone</label>
-              <input name="nextOfKinPhone" value={student.nextOfKinPhone} onChange={handleChange} type="text" placeholder="Next of Kin Contact" style={styles.input} required />
-            </div>
-
-            <div style={styles.group}>
-              <label>Status</label>
-              <select name="status" value={student.status} onChange={handleChange} style={styles.input} required>
-                <option value="">Select Status</option>
-                <option value="Active">Active</option>
-                <option value="Deferred">Deferred</option>
-                <option value="Graduated">Graduated</option>
-                <option value="Withdrawn">Withdrawn</option>
-              </select>
+          {/* Personal Details */}
+          <div style={styles.section}>
+            <h3 style={styles.sectionTitle}>Personal Details</h3>
+            <div style={styles.form}>
+              {field("First Name", "first_name", "text", true)}
+              {field("Other Name(s)", "other_name")}
+              {field("Last Name", "last_name", "text", true)}
+              <div style={styles.group}>
+                <label style={styles.label}>Gender</label>
+                <select name="gender" value={student.gender} onChange={handleChange} style={styles.input}>
+                  <option value="">Select gender</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              {field("Date of Birth", "dob", "date")}
+              {field("Place of Birth", "place_of_birth")}
+              {field("Nationality", "nationality")}
+              {field("OMANG", "omang")}
+              {field("Passport Number", "passport")}
+              {field("Disability", "disability")}
+              <div style={styles.group}>
+                <label style={styles.label}>SEN (Special Educational Needs)</label>
+                <select name="sen" value={student.sen} onChange={(e) => setStudent({ ...student, sen: e.target.value === "true" })} style={styles.input}>
+                  <option value={false}>No</option>
+                  <option value={true}>Yes</option>
+                </select>
+              </div>
+              <div style={styles.group}>
+                <label style={styles.label}>OVC (Orphans & Vulnerable Children)</label>
+                <select name="ovc" value={student.ovc} onChange={(e) => setStudent({ ...student, ovc: e.target.value === "true" })} style={styles.input}>
+                  <option value={false}>No</option>
+                  <option value={true}>Yes</option>
+                </select>
+              </div>
             </div>
           </div>
 
-          <div style={styles.buttonContainer}>
-            <button type="submit" style={styles.saveBtn}>
-              Save Student
-            </button>
+          {/* Contact */}
+          <div style={styles.section}>
+            <h3 style={styles.sectionTitle}>Contact Information</h3>
+            <div style={styles.form}>
+              {field("Email", "email", "email")}
+              {field("Telephone", "tel_no")}
+              {field("Cell Number", "cell_no")}
+              {field("Address", "address")}
+            </div>
+          </div>
 
+          {/* Admission */}
+          <div style={styles.section}>
+            <h3 style={styles.sectionTitle}>Admission</h3>
+            <div style={styles.form}>
+              {field("Admission Date", "admission_date", "date")}
+              {field("Academic Qualifications", "academic_qualifications")}
+              {field("Professional Qualification", "prof_qualification")}
+              {field("Relevant Experience", "relevant_experience")}
+            </div>
+          </div>
+
+          {/* Entry Grades */}
+          <div style={styles.section}>
+            <h3 style={styles.sectionTitle}>Entry Grades <span style={styles.optional}>(optional)</span></h3>
+            <div style={styles.form}>
+              {gradeField("English", "english_grade")}
+              {gradeField("Maths", "maths_grade")}
+              {gradeField("Science", "science_grade")}
+              {gradeField("Technology", "technology_grade")}
+              {gradeField("Technical Maths", "technical_maths_grade")}
+              {gradeField("Technical Drawing", "technical_drawing_grade")}
+              {gradeField("Practical", "practical_grade")}
+              {gradeField("Associated Studies", "associated_studies_grade")}
+              <div style={{ ...styles.group, gridColumn: "span 2" }}>
+                <label style={styles.label}>Other Subjects Summary</label>
+                <textarea
+                  name="other_subjects_summary"
+                  value={student.other_subjects_summary}
+                  onChange={handleChange}
+                  style={{ ...styles.input, height: "80px", resize: "vertical" }}
+                  placeholder="e.g. Setswana — B, History — C"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Next of Kin */}
+          <div style={styles.section}>
+            <h3 style={styles.sectionTitle}>Next of Kin <span style={styles.optional}>(optional)</span></h3>
+            <div style={styles.form}>
+              <div style={styles.group}>
+                <label style={styles.label}>First Name</label>
+                <input name="name" value={nok.name} onChange={handleNokChange} style={styles.input} />
+              </div>
+              <div style={styles.group}>
+                <label style={styles.label}>Surname</label>
+                <input name="surname" value={nok.surname} onChange={handleNokChange} style={styles.input} />
+              </div>
+              <div style={styles.group}>
+                <label style={styles.label}>Relationship</label>
+                <input name="relation" value={nok.relation} onChange={handleNokChange} style={styles.input} placeholder="e.g. Mother, Father, Guardian" />
+              </div>
+              <div style={styles.group}>
+                <label style={styles.label}>Telephone</label>
+                <input name="tel_no" value={nok.tel_no} onChange={handleNokChange} style={styles.input} />
+              </div>
+              <div style={styles.group}>
+                <label style={styles.label}>Cell Number</label>
+                <input name="cell_no" value={nok.cell_no} onChange={handleNokChange} style={styles.input} />
+              </div>
+              <div style={styles.group}>
+                <label style={styles.label}>Email</label>
+                <input name="email" value={nok.email} onChange={handleNokChange} style={styles.input} type="email" />
+              </div>
+            </div>
+          </div>
+
+          <div style={styles.buttonRow}>
+            <button type="submit" style={{ ...styles.saveBtn, opacity: loading ? 0.7 : 1 }} disabled={loading}>
+              {loading ? "Saving..." : "Save Student"}
+            </button>
             <button type="button" onClick={() => navigate("/students")} style={styles.cancelBtn}>
               Cancel
             </button>
@@ -219,66 +261,18 @@ export default function AddStudent() {
 }
 
 const styles = {
-  container: {
-    background: "#f5f6fa",
-    minHeight: "100vh",
-  },
-
-  header: {
-    marginBottom: "25px",
-  },
-
-  card: {
-    background: "#fff",
-    padding: "30px",
-    borderRadius: "12px",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-  },
-
-  form: {
-    display: "grid",
-    gridTemplateColumns: "repeat(2,1fr)",
-    gap: "20px",
-  },
-
-  group: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "8px",
-  },
-
-  input: {
-    padding: "12px",
-    border: "1px solid #d1d5db",
-    borderRadius: "8px",
-    outline: "none",
-  },
-
-  buttonContainer: {
-    marginTop: "30px",
-    display: "flex",
-    gap: "12px",
-  },
-
-  saveBtn: {
-    background: "#1e3a8a",
-    color: "#fff",
-    border: "none",
-    padding: "14px 25px",
-    borderRadius: "8px",
-    cursor: "pointer",
-    fontWeight: "600",
-    fontSize: "15px",
-  },
-
-  cancelBtn: {
-    background: "#111827",
-    color: "#fff",
-    border: "none",
-    padding: "14px 25px",
-    borderRadius: "8px",
-    cursor: "pointer",
-    fontWeight: "600",
-    fontSize: "15px",
-  },
+  container: { padding: "20px", background: "#f5f6fa", minHeight: "100vh" },
+  topBar: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px" },
+  backBtn: { background: "none", border: "none", color: "#1e3a8a", cursor: "pointer", fontSize: "14px", fontWeight: "600" },
+  errorBox: { background: "#fee2e2", color: "#991b1b", padding: "12px", borderRadius: "8px", marginBottom: "15px" },
+  section: { background: "#fff", padding: "25px", borderRadius: "12px", marginBottom: "20px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" },
+  sectionTitle: { margin: "0 0 20px 0", color: "#111827" },
+  optional: { color: "#9ca3af", fontSize: "13px", fontWeight: "400" },
+  form: { display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "20px" },
+  group: { display: "flex", flexDirection: "column", gap: "8px" },
+  label: { fontSize: "14px", color: "#374151", fontWeight: "500" },
+  input: { padding: "12px", border: "1px solid #d1d5db", borderRadius: "8px", outline: "none", fontSize: "14px" },
+  buttonRow: { display: "flex", gap: "12px", marginBottom: "40px" },
+  saveBtn: { background: "#1e3a8a", color: "#fff", border: "none", padding: "14px 25px", borderRadius: "8px", cursor: "pointer", fontWeight: "600", fontSize: "15px" },
+  cancelBtn: { background: "#6b7280", color: "#fff", border: "none", padding: "14px 25px", borderRadius: "8px", cursor: "pointer", fontWeight: "600", fontSize: "15px" },
 };

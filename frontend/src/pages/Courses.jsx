@@ -1,38 +1,59 @@
+import { useState, useEffect } from "react";
+import { useNavigate, Link } from "react-router-dom";
 import Layout from "../components/Layout";
-import { Link } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { apiFetch } from "../api";
 
 export default function Courses() {
+  const navigate = useNavigate();
   const [courses, setCourses] = useState([]);
   const [search, setSearch] = useState("");
+  const [programmeFilter, setProgrammeFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [summary, setSummary] = useState({ total: 0, active: 0, departments: 0 });
 
-  useEffect(() => {
-    const savedCourses = JSON.parse(localStorage.getItem("courses")) || [];
-    setCourses(savedCourses);
-  }, []);
+  const role = localStorage.getItem("role");
 
-  const deleteCourse = (courseCode) => {
-    const confirmDelete = window.confirm("Delete this course?");
+  useEffect(() => { fetchCourses(); }, [search, programmeFilter, statusFilter]);
 
-    if (!confirmDelete) return;
-
-    const updatedCourses = courses.filter(
-      (course) => course.courseCode !== courseCode
-    );
-
-    localStorage.setItem("courses", JSON.stringify(updatedCourses));
-    setCourses(updatedCourses);
+  const fetchCourses = async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (search) params.append("search", search);
+      if (programmeFilter) params.append("programme_type", programmeFilter);
+      if (statusFilter !== "") params.append("is_active", statusFilter);
+      const response = await apiFetch(`/courses/?${params}`);
+      if (response.status === 401) { localStorage.clear(); navigate("/"); return; }
+      const data = await response.json();
+      setCourses(data);
+      setSummary({
+        total: data.length,
+        active: data.filter(c => c.is_active).length,
+        departments: new Set(data.map(c => c.department_id).filter(Boolean)).size,
+      });
+    } catch {
+      setError("Failed to load courses.");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const filteredCourses = courses.filter(
-    (course) =>
-      (course.courseCode || "").toLowerCase().includes(search.toLowerCase()) ||
-      (course.courseName || "").toLowerCase().includes(search.toLowerCase()) ||
-      (course.faculty || "").toLowerCase().includes(search.toLowerCase()) ||
-      (course.department || "").toLowerCase().includes(search.toLowerCase()) ||
-      (course.level || "").toLowerCase().includes(search.toLowerCase()) ||
-      (course.lecturerId || "").toLowerCase().includes(search.toLowerCase())
-  );
+  const handleToggleActive = async (id, isActive) => {
+    const action = isActive ? "deactivate" : "reactivate";
+    if (!window.confirm(`Are you sure you want to ${action} this course?`)) return;
+    try {
+      const response = await apiFetch(`/courses/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({ is_active: !isActive }),
+      });
+      if (response.ok) fetchCourses();
+      else alert("Failed to update course.");
+    } catch {
+      alert("Could not connect to server.");
+    }
+  };
 
   return (
     <Layout>
@@ -40,101 +61,109 @@ export default function Courses() {
         <div style={styles.header}>
           <div>
             <h1 style={styles.title}>Courses</h1>
-            <p style={styles.subtitle}>
-              Manage courses, faculties, departments and levels
-            </p>
+            <p style={styles.subtitle}>Manage courses and programmes</p>
           </div>
-
-          <Link to="/courses/add">
-            <button style={styles.addBtn}>+ Add Course</button>
-          </Link>
+          {(role === "Admin" || role === "DB Admin") && (
+            <Link to="/courses/add">
+              <button style={styles.addBtn}>+ Add Course</button>
+            </Link>
+          )}
         </div>
 
+        {/* Summary cards */}
         <div style={styles.cards}>
-          <div style={styles.card}>
-            <h3>Total Courses</h3>
-            <h1>{courses.length}</h1>
-          </div>
-
-          <div style={styles.card}>
-            <h3>Active Courses</h3>
-            <h1>{courses.filter((course) => course.status === "Active").length}</h1>
-          </div>
-
-          <div style={styles.card}>
-            <h3>Faculties</h3>
-            <h1>{new Set(courses.map((course) => course.faculty).filter(Boolean)).size}</h1>
-          </div>
+          {[
+            { label: "Total Courses", value: summary.total },
+            { label: "Active Courses", value: summary.active },
+            { label: "Departments", value: summary.departments },
+          ].map((item, i) => (
+            <div key={i} style={styles.card}>
+              <h3 style={styles.cardLabel}>{item.label}</h3>
+              <h2 style={styles.cardValue}>{item.value}</h2>
+            </div>
+          ))}
         </div>
 
-        <div style={styles.searchSection}>
+        {/* Search and filters */}
+        <div style={styles.filterRow}>
           <input
             type="text"
-            placeholder="Search course..."
+            placeholder="Search by course name or code..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={styles.searchInput}
           />
+          <select value={programmeFilter} onChange={(e) => setProgrammeFilter(e.target.value)} style={styles.filterSelect}>
+            <option value="">All Programmes</option>
+            <option value="Long Term">Long Term</option>
+            <option value="Short Term">Short Term</option>
+          </select>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={styles.filterSelect}>
+            <option value="">All Statuses</option>
+            <option value="true">Active</option>
+            <option value="false">Inactive</option>
+          </select>
         </div>
 
+        {error && <div style={styles.errorBox}>{error}</div>}
+
         <div style={styles.tableCard}>
-          <table style={styles.table}>
-            <thead>
-              <tr>
-                <th>Course Code</th>
-                <th>Course Name</th>
-                <th>Faculty</th>
-                <th>Department</th>
-                <th>Level</th>
-                <th>Academic Year</th>
-                <th>Lecturer ID</th>
-                <th>Status</th>
-                <th>View</th>
-                <th>Delete</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {filteredCourses.length === 0 && (
+          {loading ? (
+            <div style={styles.empty}>Loading...</div>
+          ) : (
+            <table style={styles.table}>
+              <thead>
                 <tr>
-                  <td colSpan="10" style={styles.empty}>
-                    Course records will appear here once added or connected to the backend.
-                  </td>
+                  <th style={styles.th}>Code</th>
+                  <th style={styles.th}>Course Name</th>
+                  <th style={styles.th}>Department</th>
+                  <th style={styles.th}>Level</th>
+                  <th style={styles.th}>Duration</th>
+                  <th style={styles.th}>Programme Type</th>
+                  <th style={styles.th}>Status</th>
+                  <th style={styles.th}>Actions</th>
                 </tr>
-              )}
-
-              {filteredCourses.map((course) => (
-                <tr key={course.courseCode}>
-                  <td>{course.courseCode}</td>
-                  <td>{course.courseName}</td>
-                  <td>{course.faculty}</td>
-                  <td>{course.department}</td>
-                  <td>{course.level}</td>
-                  <td>{course.academicYear || "-"}</td>
-                  <td>{course.lecturerId || "-"}</td>
-
-                  <td>
-                    <span style={styles.activeBadge}>{course.status}</span>
-                  </td>
-
-                  <td>
-                    <Link to={`/courses/details/${course.courseCode}`}>
-                      <button style={styles.viewBtn}>View</button>
-                    </Link>
-                  </td>
-
-                  <td>
-                    <button
-                      style={styles.deleteBtn}
-                      onClick={() => deleteCourse(course.courseCode)}
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {courses.length === 0 ? (
+                  <tr><td colSpan="8" style={styles.empty}>No courses found.</td></tr>
+                ) : (
+                  courses.map((c) => (
+                    <tr key={c.id}>
+                      <td style={styles.td}>{c.course_code}</td>
+                      <td style={styles.td}>{c.course_name}</td>
+                      <td style={styles.td}>{c.department || "—"}</td>
+                      <td style={styles.td}>{c.course_level || "—"}</td>
+                      <td style={styles.td}>{c.duration_yrs ? `${c.duration_yrs} yr(s)` : "—"}</td>
+                      <td style={styles.td}>{c.programme_type || "—"}</td>
+                      <td style={styles.td}>
+                        <span style={{
+                          ...styles.badge,
+                          background: c.is_active ? "#dcfce7" : "#fee2e2",
+                          color: c.is_active ? "#166534" : "#991b1b",
+                        }}>{c.is_active ? "Active" : "Inactive"}</span>
+                      </td>
+                      <td style={styles.td}>
+                        <div style={styles.actionRow}>
+                          <Link to={`/courses/details/${c.course_code}`}>
+                            <button style={styles.viewBtn}>View</button>
+                          </Link>
+                          {(role === "Admin" || role === "DB Admin") && (
+                            <button
+                              style={c.is_active ? styles.deactivateBtn : styles.activateBtn}
+                              onClick={() => handleToggleActive(c.id, c.is_active)}
+                            >
+                              {c.is_active ? "Deactivate" : "Reactivate"}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
     </Layout>
@@ -142,76 +171,27 @@ export default function Courses() {
 }
 
 const styles = {
-  container: { background: "#f5f6fa", minHeight: "100vh" },
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: "25px",
-  },
+  container: { padding: "20px", background: "#f5f6fa", minHeight: "100vh" },
+  header: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "25px" },
   title: { margin: 0, color: "#111827" },
-  subtitle: { marginTop: "6px", color: "#6b7280" },
-  addBtn: {
-    background: "#1e3a8a",
-    color: "#fff",
-    border: "none",
-    padding: "12px 18px",
-    borderRadius: "8px",
-    cursor: "pointer",
-    fontWeight: "600",
-  },
-  cards: {
-    display: "grid",
-    gridTemplateColumns: "repeat(3,1fr)",
-    gap: "20px",
-    marginBottom: "25px",
-  },
-  card: {
-    background: "#fff",
-    padding: "20px",
-    borderRadius: "12px",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-  },
-  searchSection: { marginBottom: "20px" },
-  searchInput: {
-    width: "100%",
-    padding: "12px",
-    border: "1px solid #d1d5db",
-    borderRadius: "8px",
-    outline: "none",
-  },
-  tableCard: {
-    background: "#fff",
-    padding: "20px",
-    borderRadius: "12px",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-    overflowX: "auto",
-  },
+  subtitle: { marginTop: "6px", color: "#6b7280", margin: "6px 0 0 0" },
+  addBtn: { background: "#1e3a8a", color: "#fff", border: "none", padding: "12px 18px", borderRadius: "8px", cursor: "pointer", fontWeight: "600" },
+  cards: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "20px", marginBottom: "25px" },
+  card: { background: "#fff", padding: "20px", borderRadius: "12px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" },
+  cardLabel: { color: "#6b7280", fontSize: "14px", margin: "0 0 8px 0" },
+  cardValue: { margin: 0, fontSize: "28px", color: "#111827" },
+  filterRow: { display: "flex", gap: "10px", marginBottom: "20px" },
+  searchInput: { flex: 2, padding: "12px", border: "1px solid #d1d5db", borderRadius: "8px", outline: "none" },
+  filterSelect: { flex: 1, padding: "12px", border: "1px solid #d1d5db", borderRadius: "8px", outline: "none" },
+  errorBox: { background: "#fee2e2", color: "#991b1b", padding: "12px", borderRadius: "8px", marginBottom: "15px" },
+  tableCard: { background: "#fff", padding: "20px", borderRadius: "12px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)", overflowX: "auto" },
   table: { width: "100%", borderCollapse: "collapse" },
-  activeBadge: {
-    background: "#dcfce7",
-    color: "#166534",
-    padding: "6px 12px",
-    borderRadius: "20px",
-    fontWeight: "600",
-  },
-  viewBtn: {
-    background: "#1e3a8a",
-    color: "#fff",
-    border: "none",
-    padding: "8px 12px",
-    borderRadius: "6px",
-    cursor: "pointer",
-    fontWeight: "600",
-  },
-  deleteBtn: {
-    background: "#dc2626",
-    color: "#fff",
-    border: "none",
-    padding: "8px 12px",
-    borderRadius: "6px",
-    cursor: "pointer",
-    fontWeight: "600",
-  },
+  th: { textAlign: "left", padding: "10px", borderBottom: "2px solid #f3f4f6", color: "#6b7280", fontSize: "13px" },
+  td: { padding: "12px 10px", borderBottom: "1px solid #f3f4f6", fontSize: "14px" },
+  badge: { padding: "4px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: "600" },
+  actionRow: { display: "flex", gap: "8px" },
+  viewBtn: { background: "#2563eb", color: "#fff", border: "none", padding: "6px 12px", borderRadius: "6px", cursor: "pointer", fontSize: "13px" },
+  deactivateBtn: { background: "#dc2626", color: "#fff", border: "none", padding: "6px 12px", borderRadius: "6px", cursor: "pointer", fontSize: "13px" },
+  activateBtn: { background: "#16a34a", color: "#fff", border: "none", padding: "6px 12px", borderRadius: "6px", cursor: "pointer", fontSize: "13px" },
   empty: { textAlign: "center", padding: "25px", color: "#6b7280" },
 };

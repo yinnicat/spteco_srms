@@ -1,242 +1,229 @@
+import { useState, useEffect } from "react";
+import { useNavigate, Link } from "react-router-dom";
 import Layout from "../components/Layout";
-import { Link } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { apiFetch } from "../api";
 
 export default function Students() {
+  const navigate = useNavigate();
   const [students, setStudents] = useState([]);
+  const [summary, setSummary] = useState({ total: 0, active: 0, sen: 0, ovc: 0 });
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [senFilter, setSenFilter] = useState("");
+  const [ovcFilter, setOvcFilter] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const limit = 20;
+
+  const role = localStorage.getItem("role");
 
   useEffect(() => {
-    const savedStudents = JSON.parse(localStorage.getItem("students")) || [];
-    setStudents(savedStudents);
-  }, []);
+    fetchStudents();
+    fetchSummary();
+  }, [page, search, statusFilter, senFilter, ovcFilter]);
 
-  const deleteStudent = (studentNo) => {
-    const confirmDelete = window.confirm(
-      "Are you sure you want to delete this student?"
-    );
-
-    if (!confirmDelete) return;
-
-    const updatedStudents = students.filter(
-      (student) => student.studentNo !== studentNo
-    );
-
-    localStorage.setItem("students", JSON.stringify(updatedStudents));
-    setStudents(updatedStudents);
+  const fetchStudents = async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ page, limit });
+      if (search) params.append("search", search);
+      if (statusFilter) params.append("status", statusFilter);
+      if (senFilter !== "") params.append("sen", senFilter);
+      if (ovcFilter !== "") params.append("ovc", ovcFilter);
+      const response = await apiFetch(`/students/?${params}`);
+      if (response.status === 401) { localStorage.clear(); navigate("/"); return; }
+      const data = await response.json();
+      setStudents(data.students);
+      setTotal(data.total);
+    } catch {
+      setError("Failed to load students.");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const filteredStudents = students.filter((student) => {
-    const fullName =
-      student.name || `${student.firstName || ""} ${student.lastName || ""}`;
+  const fetchSummary = async () => {
+    try {
+      const response = await apiFetch("/reports/dashboard");
+      const data = await response.json();
+      setSummary({
+        total: data.active_enrolments,
+        active: data.active_enrolments,
+        sen: data.sen_students,
+        ovc: data.ovc_students,
+      });
+    } catch {}
+  };
 
-    return (
-      fullName.toLowerCase().includes(search.toLowerCase()) ||
-      (student.studentNo || "").toLowerCase().includes(search.toLowerCase()) ||
-      (student.programme || "").toLowerCase().includes(search.toLowerCase()) ||
-      (student.faculty || "").toLowerCase().includes(search.toLowerCase())
-    );
-  });
+  const handleDeactivate = async (id, currentStatus) => {
+    const newStatus = currentStatus === "Active" ? "Inactive" : "Active";
+    const action = newStatus === "Inactive" ? "deactivate" : "reactivate";
+    if (!window.confirm(`Are you sure you want to ${action} this student?`)) return;
+    try {
+      const response = await apiFetch(`/students/${id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (response.ok) fetchStudents();
+      else alert("Failed to update status.");
+    } catch {
+      alert("Could not connect to server.");
+    }
+  };
 
   return (
     <Layout>
       <div style={styles.container}>
         <div style={styles.header}>
           <h1>Students</h1>
-
-          <Link to="/students/add">
-            <button style={styles.addBtn}>+ Add Student</button>
-          </Link>
+          {(role === "Admin" || role === "DB Admin") && (
+            <Link to="/students/add">
+              <button style={styles.addBtn}>+ Add Student</button>
+            </Link>
+          )}
         </div>
 
+        {/* Summary Cards */}
         <div style={styles.summary}>
-          <div style={styles.summaryCard}>
-            <h3>Total Students</h3>
-            <h2>{students.length}</h2>
-          </div>
-
-          <div style={styles.summaryCard}>
-            <h3>SEN Students</h3>
-            <h2>{students.filter((s) => s.sen === "Yes").length}</h2>
-          </div>
-
-          <div style={styles.summaryCard}>
-            <h3>OVC Students</h3>
-            <h2>{students.filter((s) => s.ovc === "Yes").length}</h2>
-          </div>
-
-          <div style={styles.summaryCard}>
-            <h3>Active Students</h3>
-            <h2>{students.filter((s) => s.status === "Active").length}</h2>
-          </div>
+          {[
+            { label: "Active Enrolments", value: summary.active },
+            { label: "SEN Students", value: summary.sen },
+            { label: "OVC Students", value: summary.ovc },
+            { label: "Total Results", value: total },
+          ].map((item, i) => (
+            <div key={i} style={styles.summaryCard}>
+              <h3 style={styles.summaryLabel}>{item.label}</h3>
+              <h2 style={styles.summaryValue}>{item.value}</h2>
+            </div>
+          ))}
         </div>
 
-        <div style={styles.searchSection}>
+        {/* Search and Filters */}
+        <div style={styles.filterRow}>
           <input
             type="text"
-            placeholder="Search student..."
+            placeholder="Search by name, student number or OMANG..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             style={styles.searchInput}
           />
+          <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }} style={styles.filterSelect}>
+            <option value="">All Statuses</option>
+            <option value="Active">Active</option>
+            <option value="Inactive">Inactive</option>
+            <option value="Graduated">Graduated</option>
+            <option value="Suspended">Suspended</option>
+            <option value="Withdrawn">Withdrawn</option>
+          </select>
+          <select value={senFilter} onChange={(e) => { setSenFilter(e.target.value); setPage(1); }} style={styles.filterSelect}>
+            <option value="">SEN — All</option>
+            <option value="true">SEN — Yes</option>
+            <option value="false">SEN — No</option>
+          </select>
+          <select value={ovcFilter} onChange={(e) => { setOvcFilter(e.target.value); setPage(1); }} style={styles.filterSelect}>
+            <option value="">OVC — All</option>
+            <option value="true">OVC — Yes</option>
+            <option value="false">OVC — No</option>
+          </select>
         </div>
+
+        {error && <div style={styles.errorBox}>{error}</div>}
 
         <div style={styles.tableCard}>
-          <table style={styles.table}>
-            <thead>
-              <tr>
-                <th>Student No</th>
-                <th>Name</th>
-                <th>Programme</th>
-                <th>Faculty</th>
-                <th>Status</th>
-                <th>SEN</th>
-                <th>OVC</th>
-                <th>View</th>
-                <th>Delete</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {filteredStudents.length === 0 && (
+          {loading ? (
+            <div style={styles.empty}>Loading...</div>
+          ) : (
+            <table style={styles.table}>
+              <thead>
                 <tr>
-                  <td colSpan="9" style={styles.empty}>
-                    Student records will appear here once added or connected to
-                    the backend.
-                  </td>
+                  <th style={styles.th}>Student No</th>
+                  <th style={styles.th}>Name</th>
+                  <th style={styles.th}>Nationality</th>
+                  <th style={styles.th}>Status</th>
+                  <th style={styles.th}>SEN</th>
+                  <th style={styles.th}>OVC</th>
+                  <th style={styles.th}>Actions</th>
                 </tr>
-              )}
-
-              {filteredStudents.map((student) => {
-                const fullName =
-                  student.name ||
-                  `${student.firstName || ""} ${student.lastName || ""}`;
-
-                return (
-                  <tr key={student.studentNo}>
-                    <td>{student.studentNo}</td>
-                    <td>{fullName}</td>
-                    <td>{student.programme}</td>
-                    <td>{student.faculty}</td>
-                    <td>
-                      <span style={styles.active}>{student.status}</span>
-                    </td>
-                    <td>{student.sen}</td>
-                    <td>{student.ovc}</td>
-                    <td>
-                      <Link to={`/students/profile/${student.studentNo}`}>
-                        <button style={styles.viewBtn}>View</button>
-                      </Link>
-                    </td>
-                    <td>
-                      <button
-                        style={styles.deleteBtn}
-                        onClick={() => deleteStudent(student.studentNo)}
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {students.length === 0 ? (
+                  <tr><td colSpan="7" style={styles.empty}>No students found.</td></tr>
+                ) : (
+                  students.map((s) => (
+                    <tr key={s.id}>
+                      <td style={styles.td}>{s.student_no}</td>
+                      <td style={styles.td}>{s.first_name} {s.last_name}</td>
+                      <td style={styles.td}>{s.nationality || "—"}</td>
+                      <td style={styles.td}>
+                        <span style={{
+                          ...styles.badge,
+                          background: s.status === "Active" ? "#dcfce7" : s.status === "Graduated" ? "#dbeafe" : "#fee2e2",
+                          color: s.status === "Active" ? "#166534" : s.status === "Graduated" ? "#1e3a8a" : "#991b1b",
+                        }}>{s.status}</span>
+                      </td>
+                      <td style={styles.td}>{s.sen ? "Yes" : "No"}</td>
+                      <td style={styles.td}>{s.ovc ? "Yes" : "No"}</td>
+                      <td style={styles.td}>
+                        <div style={styles.actionRow}>
+                          <Link to={`/students/profile/${s.student_no}`}>
+                            <button style={styles.viewBtn}>View</button>
+                          </Link>
+                          {(role === "Admin" || role === "DB Admin") && (
+                            <button
+                              style={s.status === "Active" ? styles.deactivateBtn : styles.activateBtn}
+                              onClick={() => handleDeactivate(s.id, s.status)}
+                            >
+                              {s.status === "Active" ? "Deactivate" : "Reactivate"}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
+
+        {/* Pagination */}
+        {total > limit && (
+          <div style={styles.pagination}>
+            <button style={styles.pageBtn} onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>Previous</button>
+            <span style={styles.pageInfo}>Page {page} — {total} total</span>
+            <button style={styles.pageBtn} onClick={() => setPage(p => p + 1)} disabled={students.length < limit}>Next</button>
+          </div>
+        )}
       </div>
     </Layout>
   );
 }
 
 const styles = {
-  container: {
-    padding: "20px",
-  },
-
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: "20px",
-  },
-
-  summary: {
-    display: "grid",
-    gridTemplateColumns: "repeat(4,1fr)",
-    gap: "20px",
-    marginBottom: "20px",
-  },
-
-  summaryCard: {
-    background: "#fff",
-    padding: "20px",
-    borderRadius: "12px",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-  },
-
-  addBtn: {
-    background: "#1e3a8a",
-    color: "#fff",
-    border: "none",
-    padding: "10px 16px",
-    borderRadius: "8px",
-    cursor: "pointer",
-  },
-
-  searchSection: {
-    display: "flex",
-    gap: "10px",
-    marginBottom: "20px",
-  },
-
-  searchInput: {
-    flex: 1,
-    padding: "12px",
-    border: "1px solid #d1d5db",
-    borderRadius: "8px",
-  },
-
-  tableCard: {
-    background: "#fff",
-    borderRadius: "12px",
-    padding: "20px",
-    overflowX: "auto",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-  },
-
-  table: {
-    width: "100%",
-    borderCollapse: "collapse",
-  },
-
-  active: {
-    background: "#dcfce7",
-    color: "#166534",
-    padding: "6px 12px",
-    borderRadius: "20px",
-    fontWeight: "600",
-  },
-
-  viewBtn: {
-    background: "#2563eb",
-    color: "#fff",
-    border: "none",
-    padding: "8px 14px",
-    borderRadius: "6px",
-    cursor: "pointer",
-  },
-
-  deleteBtn: {
-    background: "#dc2626",
-    color: "#fff",
-    border: "none",
-    padding: "8px 14px",
-    borderRadius: "6px",
-    cursor: "pointer",
-  },
-
-  empty: {
-    textAlign: "center",
-    padding: "25px",
-    color: "#6b7280",
-  },
+  container: { padding: "20px", background: "#f5f6fa", minHeight: "100vh" },
+  header: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" },
+  addBtn: { background: "#1e3a8a", color: "#fff", border: "none", padding: "10px 16px", borderRadius: "8px", cursor: "pointer", fontWeight: "600" },
+  summary: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px", marginBottom: "20px" },
+  summaryCard: { background: "#fff", padding: "20px", borderRadius: "12px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" },
+  summaryLabel: { color: "#6b7280", fontSize: "14px", margin: "0 0 8px 0" },
+  summaryValue: { fontSize: "28px", margin: 0, color: "#111827" },
+  filterRow: { display: "flex", gap: "10px", marginBottom: "20px", flexWrap: "wrap" },
+  searchInput: { flex: 2, padding: "12px", border: "1px solid #d1d5db", borderRadius: "8px", outline: "none", minWidth: "200px" },
+  filterSelect: { flex: 1, padding: "12px", border: "1px solid #d1d5db", borderRadius: "8px", outline: "none", minWidth: "120px" },
+  errorBox: { background: "#fee2e2", color: "#991b1b", padding: "12px", borderRadius: "8px", marginBottom: "15px" },
+  tableCard: { background: "#fff", borderRadius: "12px", padding: "20px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)", overflowX: "auto" },
+  table: { width: "100%", borderCollapse: "collapse" },
+  th: { textAlign: "left", padding: "10px", borderBottom: "2px solid #f3f4f6", color: "#6b7280", fontSize: "13px" },
+  td: { padding: "12px 10px", borderBottom: "1px solid #f3f4f6", fontSize: "14px" },
+  badge: { padding: "4px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: "600" },
+  actionRow: { display: "flex", gap: "8px" },
+  viewBtn: { background: "#2563eb", color: "#fff", border: "none", padding: "6px 12px", borderRadius: "6px", cursor: "pointer", fontSize: "13px" },
+  deactivateBtn: { background: "#dc2626", color: "#fff", border: "none", padding: "6px 12px", borderRadius: "6px", cursor: "pointer", fontSize: "13px" },
+  activateBtn: { background: "#16a34a", color: "#fff", border: "none", padding: "6px 12px", borderRadius: "6px", cursor: "pointer", fontSize: "13px" },
+  empty: { textAlign: "center", padding: "25px", color: "#6b7280" },
+  pagination: { display: "flex", justifyContent: "center", alignItems: "center", gap: "15px", marginTop: "20px" },
+  pageBtn: { background: "#1e3a8a", color: "#fff", border: "none", padding: "8px 16px", borderRadius: "6px", cursor: "pointer" },
+  pageInfo: { color: "#6b7280", fontSize: "14px" },
 };
