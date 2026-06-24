@@ -1,7 +1,39 @@
 import Layout from "../components/Layout";
 import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
 
 export default function Staff() {
+  const [staff, setStaff] = useState([]);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    const savedStaff = JSON.parse(localStorage.getItem("staff")) || [];
+    setStaff(savedStaff);
+  }, []);
+
+  const deleteStaff = (staffId) => {
+    const confirmDelete = window.confirm("Delete this staff member?");
+    if (!confirmDelete) return;
+
+    const updatedStaff = staff.filter((item) => item.staffId !== staffId);
+
+    localStorage.setItem("staff", JSON.stringify(updatedStaff));
+    setStaff(updatedStaff);
+  };
+
+  const filteredStaff = staff.filter((item) => {
+    const fullName =
+      item.name || `${item.firstName || ""} ${item.lastName || ""}`;
+
+    return (
+      fullName.toLowerCase().includes(search.toLowerCase()) ||
+      (item.staffId || "").toLowerCase().includes(search.toLowerCase()) ||
+      (item.department || "").toLowerCase().includes(search.toLowerCase()) ||
+      (item.position || "").toLowerCase().includes(search.toLowerCase()) ||
+      (item.email || "").toLowerCase().includes(search.toLowerCase())
+    );
+  });
+
   return (
     <Layout>
       <div style={styles.container}>
@@ -9,9 +41,7 @@ export default function Staff() {
           <h1>Staff Management</h1>
 
           <Link to="/staff/add">
-            <button style={styles.addBtn}>
-              + Add Staff
-            </button>
+            <button style={styles.addBtn}>+ Add Staff</button>
           </Link>
         </div>
 
@@ -19,12 +49,10 @@ export default function Staff() {
           <input
             type="text"
             placeholder="Search staff..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
             style={styles.searchInput}
           />
-
-          <button style={styles.searchBtn}>
-            Search
-          </button>
         </div>
 
         <div style={styles.tableCard}>
@@ -37,42 +65,55 @@ export default function Staff() {
                 <th>Position</th>
                 <th>Email</th>
                 <th>Status</th>
-                <th>Action</th>
+                <th>View</th>
+                <th>Delete</th>
               </tr>
             </thead>
 
             <tbody>
-              <tr>
-                <td>EMP001</td>
-                <td>John Smith</td>
-                <td>Engineering</td>
-                <td>Lecturer</td>
-                <td>john@spteco.ac.bw</td>
-                <td>Active</td>
-                <td>
-                  <Link to="/staff/profile">
-                    <button style={styles.viewBtn}>
-                      View
-                    </button>
-                  </Link>
-                </td>
-              </tr>
+              {filteredStaff.length === 0 && (
+                <tr>
+                  <td colSpan="8" style={styles.empty}>
+                    Staff records will appear here once added or connected to the backend.
+                  </td>
+                </tr>
+              )}
 
-              <tr>
-                <td>EMP002</td>
-                <td>Mary Dube</td>
-                <td>Business</td>
-                <td>HOD</td>
-                <td>mary@spteco.ac.bw</td>
-                <td>Active</td>
-                <td>
-                  <Link to="/staff/profile">
-                    <button style={styles.viewBtn}>
-                      View
-                    </button>
-                  </Link>
-                </td>
-              </tr>
+              {filteredStaff.map((item) => {
+                const fullName =
+                  item.name || `${item.firstName || ""} ${item.lastName || ""}`;
+
+                return (
+                  <tr key={item.staffId}>
+                    <td>{item.staffId}</td>
+                    <td>{fullName}</td>
+                    <td>{item.department || "-"}</td>
+                    <td>{item.position || "-"}</td>
+                    <td>{item.email || "-"}</td>
+
+                    <td>
+                      <span style={styles.active}>
+                        {item.status || "Active"}
+                      </span>
+                    </td>
+
+                    <td>
+                      <Link to={`/staff/profile/${item.staffId}`}>
+                        <button style={styles.viewBtn}>View</button>
+                      </Link>
+                    </td>
+
+                    <td>
+                      <button
+                        style={styles.deleteBtn}
+                        onClick={() => deleteStaff(item.staffId)}
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -84,8 +125,6 @@ export default function Staff() {
 const styles = {
   container: {
     padding: "20px",
-    background: "#f5f6fa",
-    minHeight: "100vh",
   },
 
   header: {
@@ -96,11 +135,11 @@ const styles = {
   },
 
   addBtn: {
-    background: "#2563eb",
+    background: "#1e3a8a",
     color: "#fff",
     border: "none",
-    padding: "10px 15px",
-    borderRadius: "6px",
+    padding: "10px 16px",
+    borderRadius: "8px",
     cursor: "pointer",
   },
 
@@ -112,24 +151,18 @@ const styles = {
 
   searchInput: {
     flex: 1,
-    padding: "10px",
-    border: "1px solid #ccc",
-    borderRadius: "6px",
-  },
-
-  searchBtn: {
-    background: "#111827",
-    color: "#fff",
-    border: "none",
-    padding: "10px 20px",
-    borderRadius: "6px",
+    padding: "12px",
+    border: "1px solid #d1d5db",
+    borderRadius: "8px",
+    outline: "none",
   },
 
   tableCard: {
     background: "#fff",
+    borderRadius: "12px",
     padding: "20px",
-    borderRadius: "10px",
-    boxShadow: "0 1px 4px rgba(0,0,0,0.1)",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+    overflowX: "auto",
   },
 
   table: {
@@ -137,12 +170,35 @@ const styles = {
     borderCollapse: "collapse",
   },
 
+  active: {
+    background: "#dcfce7",
+    color: "#166534",
+    padding: "6px 12px",
+    borderRadius: "20px",
+    fontWeight: "600",
+  },
+
   viewBtn: {
     background: "#2563eb",
     color: "#fff",
     border: "none",
-    padding: "6px 12px",
-    borderRadius: "5px",
+    padding: "8px 14px",
+    borderRadius: "6px",
     cursor: "pointer",
+  },
+
+  deleteBtn: {
+    background: "#dc2626",
+    color: "#fff",
+    border: "none",
+    padding: "8px 14px",
+    borderRadius: "6px",
+    cursor: "pointer",
+  },
+
+  empty: {
+    textAlign: "center",
+    padding: "25px",
+    color: "#6b7280",
   },
 };

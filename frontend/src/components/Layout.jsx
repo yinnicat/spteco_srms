@@ -3,26 +3,37 @@ import Topbar from "./Topbar";
 
 export default function Layout({ children }) {
   return (
-    <div>
+    <div style={styles.wrapper}>
       <Sidebar />
 
-      <div
-        style={{
-          marginLeft: "250px",
-        }}
-      >
+      <div style={styles.main}>
         <Topbar />
 
-        <div
-          style={{
-            padding: "20px",
-            background: "#f5f6fa",
-            minHeight: "calc(100vh - 70px)",
-          }}
-        >
+        <div style={styles.content}>
           {children}
         </div>
       </div>
     </div>
   );
 }
+
+const styles = {
+  wrapper: {
+    display: "flex",
+    minHeight: "100vh",
+    background: "#f5f6fa",
+  },
+
+  main: {
+    flex: 1,
+    marginLeft: "260px",
+    display: "flex",
+    flexDirection: "column",
+  },
+
+  content: {
+    flex: 1,
+    padding: "25px",
+    background: "#f5f6fa",
+  },
+};

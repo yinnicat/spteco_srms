@@ -1,35 +1,81 @@
 import { Link, useNavigate } from "react-router-dom";
-import { FaUser, FaEnvelope, FaLock, FaEye } from "react-icons/fa";
+import { FaUser, FaEnvelope, FaLock, FaEye, FaEyeSlash } from "react-icons/fa";
+import { useState } from "react";
 import logo from "../assets/SPTECO logo.jpg";
 
 export default function Signup() {
   const navigate = useNavigate();
 
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const [formData, setFormData] = useState({
+    fullname: "",
+    username: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+    role: "",
+  });
+
+  const handleChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    });
+  };
+
   const handleSignup = (e) => {
     e.preventDefault();
 
-    // Later this will save to database
+    if (!formData.role) {
+      alert("Please select a role");
+      return;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      alert("Passwords do not match");
+      return;
+    }
+
+    const users = JSON.parse(localStorage.getItem("users")) || [];
+
+    const usernameExists = users.some(
+      (user) =>
+        user.username.trim().toLowerCase() ===
+        formData.username.trim().toLowerCase()
+    );
+
+    if (usernameExists) {
+      alert("Username already exists");
+      return;
+    }
+
+    const newUser = {
+      id: "USR" + Date.now(),
+      fullname: formData.fullname,
+      username: formData.username,
+      email: formData.email,
+      password: formData.password,
+      role: formData.role,
+      status: "Active",
+    };
+
+    localStorage.setItem("users", JSON.stringify([...users, newUser]));
+
+    alert("Account created successfully. Please login.");
     navigate("/");
   };
 
   return (
     <div style={styles.container}>
-      {/* Left Panel */}
       <div style={styles.leftPanel}>
         <img src={logo} alt="SPTECO Logo" style={styles.logo} />
-
         <h1 style={styles.title}>SPTECO</h1>
-
-        <h2 style={styles.subtitle}>
-          Student Records Management System
-        </h2>
-
-        <p style={styles.college}>
-          Selebi-Phikwe Technical College
-        </p>
+        <h2 style={styles.subtitle}>Student Records Management System</h2>
+        <p style={styles.college}>Selebi-Phikwe Technical College</p>
       </div>
 
-      {/* Right Panel */}
       <div style={styles.rightPanel}>
         <div style={styles.formCard}>
           <h2>Create Account</h2>
@@ -40,7 +86,10 @@ export default function Signup() {
               <FaUser />
               <input
                 type="text"
+                name="fullname"
                 placeholder="Full Name"
+                value={formData.fullname}
+                onChange={handleChange}
                 style={styles.input}
                 required
               />
@@ -50,7 +99,10 @@ export default function Signup() {
               <FaUser />
               <input
                 type="text"
+                name="username"
                 placeholder="Username"
+                value={formData.username}
+                onChange={handleChange}
                 style={styles.input}
                 required
               />
@@ -60,7 +112,10 @@ export default function Signup() {
               <FaEnvelope />
               <input
                 type="email"
+                name="email"
                 placeholder="Email Address"
+                value={formData.email}
+                onChange={handleChange}
                 style={styles.input}
                 required
               />
@@ -69,45 +124,65 @@ export default function Signup() {
             <div style={styles.inputGroup}>
               <FaLock />
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
+                name="password"
                 placeholder="Password"
+                value={formData.password}
+                onChange={handleChange}
                 style={styles.input}
                 required
               />
-              <FaEye />
+
+              <button
+                type="button"
+                style={styles.eyeButton}
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? <FaEyeSlash /> : <FaEye />}
+              </button>
             </div>
 
             <div style={styles.inputGroup}>
               <FaLock />
               <input
-                type="password"
+                type={showConfirmPassword ? "text" : "password"}
+                name="confirmPassword"
                 placeholder="Confirm Password"
+                value={formData.confirmPassword}
+                onChange={handleChange}
                 style={styles.input}
                 required
               />
-              <FaEye />
+
+              <button
+                type="button"
+                style={styles.eyeButton}
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+              >
+                {showConfirmPassword ? <FaEyeSlash /> : <FaEye />}
+              </button>
             </div>
 
-            <select style={styles.select}>
-              <option>Select Role</option>
-              <option>Administrator</option>
-              <option>DB Administrator</option>
-              <option>Lecturer</option>
+            <select
+              name="role"
+              value={formData.role}
+              onChange={handleChange}
+              style={styles.select}
+              required
+            >
+              <option value="">Select Role</option>
+              <option value="Database Admin">Database Admin</option>
+              <option value="Admin Staff">Admin Staff</option>
+              <option value="Lecturer">Lecturer</option>
             </select>
-
-            <div style={styles.checkbox}>
-              <input type="checkbox" required />
-              <span>I agree to the terms and conditions</span>
-            </div>
 
             <button type="submit" style={styles.signupBtn}>
               Create Account
             </button>
           </form>
 
-          <p style={{ marginTop: "20px", textAlign: "center" }}>
-            Already have an account?{" "}
-            <Link to="/">Login</Link>
+          <p style={styles.loginText}>
+            Already have an account? <Link to="/">Login</Link>
           </p>
         </div>
       </div>
@@ -118,7 +193,7 @@ export default function Signup() {
 const styles = {
   container: {
     display: "flex",
-    height: "100vh",
+    minHeight: "100vh",
     fontFamily: "Arial, sans-serif",
   },
 
@@ -158,6 +233,7 @@ const styles = {
     justifyContent: "center",
     alignItems: "center",
     background: "#f5f6fa",
+    padding: "30px",
   },
 
   formCard: {
@@ -190,13 +266,15 @@ const styles = {
     borderRadius: "8px",
     border: "1px solid #ddd",
     marginBottom: "15px",
+    background: "#fff",
   },
 
-  checkbox: {
+  eyeButton: {
+    border: "none",
+    background: "transparent",
+    cursor: "pointer",
     display: "flex",
-    gap: "10px",
-    marginBottom: "20px",
-    fontSize: "14px",
+    alignItems: "center",
   },
 
   signupBtn: {
@@ -208,5 +286,10 @@ const styles = {
     borderRadius: "8px",
     cursor: "pointer",
     fontSize: "16px",
+  },
+
+  loginText: {
+    marginTop: "20px",
+    textAlign: "center",
   },
 };

@@ -1,84 +1,223 @@
 import Layout from "../components/Layout";
+import { Link } from "react-router-dom";
+import {
+  FaUserGraduate,
+  FaChalkboardTeacher,
+  FaBook,
+  FaClipboardList,
+  FaCertificate,
+  FaExclamationTriangle,
+  FaUsers,
+  FaFileAlt,
+} from "react-icons/fa";
 
 export default function Dashboard() {
+  const loggedInUser =
+    JSON.parse(localStorage.getItem("loggedInUser")) || {};
+
+  const role = loggedInUser.role || "Lecturer";
+
+  const students =
+    JSON.parse(localStorage.getItem("students")) || [];
+
+  const staff =
+    JSON.parse(localStorage.getItem("staff")) || [];
+
+  const courses =
+    JSON.parse(localStorage.getItem("courses")) || [];
+
+  const enrolments =
+    JSON.parse(localStorage.getItem("enrolments")) || [];
+
+  const certificates =
+    JSON.parse(localStorage.getItem("certificates")) || [];
+
   const stats = [
-    { title: "Total Students", value: "1,248" },
-    { title: "Total Staff", value: "128" },
-    { title: "Courses", value: "86" },
-    { title: "Active Enrolments", value: "1,024" },
-    { title: "Certificates Issued", value: "784" },
-    { title: "Uncollected Certificates", value: "45" },
-    { title: "SEN Students", value: "112" },
-    { title: "OVC Students", value: "67" },
+    {
+      title: "Total Students",
+      value: students.length,
+      icon: <FaUserGraduate />,
+      roles: ["Database Admin", "Admin Staff", "Lecturer"],
+    },
+    {
+      title: "Total Staff",
+      value: staff.length,
+      icon: <FaChalkboardTeacher />,
+      roles: ["Database Admin", "Admin Staff"],
+    },
+    {
+      title: "Courses",
+      value: courses.length,
+      icon: <FaBook />,
+      roles: ["Database Admin", "Admin Staff", "Lecturer"],
+    },
+    {
+      title: "Active Enrolments",
+      value: enrolments.filter((item) => item.status === "Active").length,
+      icon: <FaClipboardList />,
+      roles: ["Database Admin", "Admin Staff"],
+    },
+    {
+      title: "Certificates Issued",
+      value: certificates.length,
+      icon: <FaCertificate />,
+      roles: ["Database Admin", "Admin Staff"],
+    },
+    {
+      title: "Uncollected Certificates",
+      value: certificates.filter((item) => item.status === "Uncollected").length,
+      icon: <FaExclamationTriangle />,
+      roles: ["Database Admin", "Admin Staff"],
+    },
+    {
+      title: "SEN Students",
+      value: students.filter((item) => item.sen === "Yes").length,
+      icon: <FaUsers />,
+      roles: ["Database Admin", "Admin Staff"],
+    },
+    {
+      title: "OVC Students",
+      value: students.filter((item) => item.ovc === "Yes").length,
+      icon: <FaUsers />,
+      roles: ["Database Admin", "Admin Staff"],
+    },
   ];
+
+  const visibleStats = stats.filter((item) =>
+    item.roles.includes(role)
+  );
+
+  const recentEnrolments = enrolments.slice(0, 3);
 
   return (
     <Layout>
       <div style={styles.container}>
-        <h1 style={styles.heading}>Dashboard</h1>
+        <div style={styles.header}>
+          <div>
+            <h1 style={styles.heading}>Dashboard</h1>
 
-        {/* Statistics Cards */}
+            <p style={styles.subheading}>
+              Welcome back, {loggedInUser.fullname || loggedInUser.username || "System User"} — {role}
+            </p>
+          </div>
+
+          <span style={styles.roleBadge}>{role}</span>
+        </div>
+
         <div style={styles.cardsGrid}>
-          {stats.map((item, index) => (
+          {visibleStats.map((item, index) => (
             <div key={index} style={styles.card}>
-              <p style={styles.cardTitle}>{item.title}</p>
-              <h2 style={styles.cardValue}>{item.value}</h2>
+              <div style={styles.iconBox}>{item.icon}</div>
+
+              <div>
+                <p style={styles.cardTitle}>{item.title}</p>
+                <h2 style={styles.cardValue}>{item.value}</h2>
+              </div>
             </div>
           ))}
         </div>
 
-        {/* Recent Enrolments */}
-        <div style={styles.tableCard}>
-          <div style={styles.tableHeader}>
-            <h2>Recent Enrolments</h2>
-            <span style={styles.viewAll}>View all</span>
+        <div style={styles.contentGrid}>
+          <div style={styles.tableCard}>
+            <div style={styles.tableHeader}>
+              <h2>Recent Enrolments</h2>
+
+              <Link to="/enrolments" style={styles.viewAll}>
+                View all
+              </Link>
+            </div>
+
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Programme</th>
+                  <th>Enrolment Date</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {recentEnrolments.length === 0 && (
+                  <tr>
+                    <td colSpan="4" style={styles.empty}>
+                      Recent enrolments will appear here once records are added or connected to the backend.
+                    </td>
+                  </tr>
+                )}
+
+                {recentEnrolments.map((item) => (
+                  <tr key={item.enrolmentId}>
+                    <td>
+                      {item.studentNo}
+                      <br />
+                      <strong>{item.studentName}</strong>
+                    </td>
+
+                    <td>{item.programme}</td>
+                    <td>{item.enrolmentDate}</td>
+
+                    <td>
+                      <span style={styles.activeBadge}>{item.status}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
 
-          <table style={styles.table}>
-            <thead>
-              <tr>
-                <th>Student</th>
-                <th>Course</th>
-                <th>Enrolment Date</th>
-                <th>Status</th>
-              </tr>
-            </thead>
+          <div style={styles.quickCard}>
+            <h2>Quick Actions</h2>
 
-            <tbody>
-              <tr>
-                <td>
-                  STU0034/1256
-                  <br />
-                  Kabelo Mokoena
-                </td>
-                <td>Electrical Engineering N6</td>
-                <td>12 May 2026</td>
-                <td>Active</td>
-              </tr>
+            <div style={styles.actions}>
+              {(role === "Database Admin" || role === "Admin Staff") && (
+                <>
+                  <Link to="/students/add">
+                    <button style={styles.actionBtn}>Add Student</button>
+                  </Link>
 
-              <tr>
-                <td>
-                  STU0034/1257
-                  <br />
-                  Thato Dlamini
-                </td>
-                <td>Civil Engineering N6</td>
-                <td>12 May 2026</td>
-                <td>Active</td>
-              </tr>
+                  <Link to="/enrolments/add">
+                    <button style={styles.actionBtn}>New Enrolment</button>
+                  </Link>
 
-              <tr>
-                <td>
-                  STU0034/1258
-                  <br />
-                  Boitumelo Rapopeba
-                </td>
-                <td>Business Management N4</td>
-                <td>11 May 2026</td>
-                <td>Active</td>
-              </tr>
-            </tbody>
-          </table>
+                  <Link to="/certificates">
+                    <button style={styles.actionBtn}>Certificate Collection</button>
+                  </Link>
+                </>
+              )}
+
+              <Link to="/attendance">
+                <button style={styles.actionBtn}>Attendance</button>
+              </Link>
+
+              <Link to="/reports">
+                <button style={styles.actionBtn}>Reports</button>
+              </Link>
+
+              {role === "Database Admin" && (
+                <>
+                  <Link to="/users">
+                    <button style={styles.actionBtn}>User Management</button>
+                  </Link>
+
+                  <Link to="/migration">
+                    <button style={styles.actionBtn}>Data Migration</button>
+                  </Link>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div style={styles.noticeCard}>
+          <FaFileAlt style={styles.noticeIcon} />
+
+          <div>
+            <h3>System Notice</h3>
+            <p>
+              Dashboard data is prepared for backend integration. Once the backend is connected, these values will update automatically from the database.
+            </p>
+          </div>
         </div>
       </div>
     </Layout>
@@ -92,14 +231,34 @@ const styles = {
     minHeight: "100vh",
   },
 
-  heading: {
+  header: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: "20px",
+  },
+
+  heading: {
+    margin: 0,
     color: "#111827",
+  },
+
+  subheading: {
+    marginTop: "6px",
+    color: "#6b7280",
+  },
+
+  roleBadge: {
+    background: "#dbeafe",
+    color: "#1e3a8a",
+    padding: "8px 16px",
+    borderRadius: "20px",
+    fontWeight: "700",
   },
 
   cardsGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(4, 1fr)",
+    gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
     gap: "15px",
     marginBottom: "25px",
   },
@@ -107,27 +266,50 @@ const styles = {
   card: {
     background: "#fff",
     padding: "20px",
-    borderRadius: "10px",
+    borderRadius: "12px",
     boxShadow: "0 1px 4px rgba(0,0,0,0.1)",
+    display: "flex",
+    alignItems: "center",
+    gap: "15px",
+  },
+
+  iconBox: {
+    width: "46px",
+    height: "46px",
+    background: "#e8f0ff",
+    color: "#1e3a8a",
+    borderRadius: "10px",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    fontSize: "22px",
   },
 
   cardTitle: {
     color: "#6b7280",
     fontSize: "14px",
-    marginBottom: "10px",
+    marginBottom: "8px",
   },
 
   cardValue: {
-    fontSize: "32px",
+    fontSize: "30px",
     margin: 0,
     color: "#111827",
   },
 
+  contentGrid: {
+    display: "grid",
+    gridTemplateColumns: "2fr 1fr",
+    gap: "20px",
+    marginBottom: "20px",
+  },
+
   tableCard: {
     background: "#fff",
-    borderRadius: "10px",
+    borderRadius: "12px",
     padding: "20px",
     boxShadow: "0 1px 4px rgba(0,0,0,0.1)",
+    overflowX: "auto",
   },
 
   tableHeader: {
@@ -138,13 +320,69 @@ const styles = {
   },
 
   viewAll: {
-    color: "#2563eb",
-    cursor: "pointer",
+    color: "#1e3a8a",
+    textDecoration: "none",
     fontSize: "14px",
+    fontWeight: "700",
   },
 
   table: {
     width: "100%",
     borderCollapse: "collapse",
+  },
+
+  activeBadge: {
+    background: "#dcfce7",
+    color: "#166534",
+    padding: "6px 12px",
+    borderRadius: "20px",
+    fontWeight: "600",
+  },
+
+  quickCard: {
+    background: "#fff",
+    borderRadius: "12px",
+    padding: "20px",
+    boxShadow: "0 1px 4px rgba(0,0,0,0.1)",
+  },
+
+  actions: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+  },
+
+  actionBtn: {
+    width: "100%",
+    background: "#1e3a8a",
+    color: "#fff",
+    border: "none",
+    padding: "12px",
+    borderRadius: "8px",
+    cursor: "pointer",
+    textAlign: "left",
+    fontWeight: "600",
+  },
+
+  noticeCard: {
+    background: "#fff",
+    borderRadius: "12px",
+    padding: "20px",
+    boxShadow: "0 1px 4px rgba(0,0,0,0.1)",
+    display: "flex",
+    gap: "15px",
+    alignItems: "center",
+    borderLeft: "5px solid #1e3a8a",
+  },
+
+  noticeIcon: {
+    fontSize: "28px",
+    color: "#1e3a8a",
+  },
+
+  empty: {
+    textAlign: "center",
+    padding: "25px",
+    color: "#6b7280",
   },
 };

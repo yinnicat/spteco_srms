@@ -1,33 +1,45 @@
 import { Link, useNavigate } from "react-router-dom";
-import { FaUser, FaLock, FaEye } from "react-icons/fa";
+import { FaUser, FaLock, FaEye, FaEyeSlash } from "react-icons/fa";
+import { useState } from "react";
 import logo from "../assets/SPTECO logo.jpg";
 
 export default function Login() {
   const navigate = useNavigate();
 
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+
   const handleLogin = (e) => {
     e.preventDefault();
+
+    const users = JSON.parse(localStorage.getItem("users")) || [];
+
+    const user = users.find(
+      (item) =>
+        item.username.trim().toLowerCase() === username.trim().toLowerCase() &&
+        item.password === password
+    );
+
+    if (!user) {
+      alert("Invalid username or password. Please create an account first.");
+      return;
+    }
+
+    localStorage.setItem("loggedInUser", JSON.stringify(user));
+
     navigate("/dashboard");
   };
 
   return (
     <div style={styles.container}>
-      {/* Left Panel */}
       <div style={styles.leftPanel}>
         <img src={logo} alt="SPTECO Logo" style={styles.logo} />
-
         <h1 style={styles.title}>SPTECO</h1>
-
-        <h2 style={styles.subtitle}>
-          Student Records Management System
-        </h2>
-
-        <p style={styles.college}>
-          Selebi-Phikwe Technical College
-        </p>
+        <h2 style={styles.subtitle}>Student Records Management System</h2>
+        <p style={styles.college}>Selebi-Phikwe Technical College</p>
       </div>
 
-      {/* Right Panel */}
       <div style={styles.rightPanel}>
         <div style={styles.formCard}>
           <h2>Welcome Back</h2>
@@ -39,27 +51,37 @@ export default function Login() {
               <input
                 type="text"
                 placeholder="Username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 style={styles.input}
+                required
               />
             </div>
 
             <div style={styles.inputGroup}>
               <FaLock />
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 style={styles.input}
+                required
               />
-              <FaEye />
+
+              <button
+                type="button"
+                style={styles.eyeButton}
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? <FaEyeSlash /> : <FaEye />}
+              </button>
             </div>
 
-            <div style={styles.options}>
-              <label>
-                <input type="checkbox" />
-                Remember Me
-              </label>
-
-              <a href="#">Forgot Password?</a>
+            <div style={styles.forgotRow}>
+              <Link to="/forgot-password" style={styles.forgotLink}>
+                Forgot Password?
+              </Link>
             </div>
 
             <button type="submit" style={styles.loginBtn}>
@@ -67,9 +89,8 @@ export default function Login() {
             </button>
           </form>
 
-          <p style={{ marginTop: "20px" }}>
-            Don't have an account?{" "}
-            <Link to="/signup">Sign Up</Link>
+          <p style={styles.signupText}>
+            Don't have an account? <Link to="/signup">Sign Up</Link>
           </p>
         </div>
       </div>
@@ -147,11 +168,24 @@ const styles = {
     flex: 1,
   },
 
-  options: {
+  eyeButton: {
+    border: "none",
+    background: "transparent",
+    cursor: "pointer",
     display: "flex",
-    justifyContent: "space-between",
-    marginBottom: "20px",
+    alignItems: "center",
+  },
+
+  forgotRow: {
+    textAlign: "right",
+    marginBottom: "18px",
+  },
+
+  forgotLink: {
+    color: "#1e3a8a",
     fontSize: "14px",
+    textDecoration: "none",
+    fontWeight: "600",
   },
 
   loginBtn: {
@@ -163,5 +197,9 @@ const styles = {
     borderRadius: "8px",
     cursor: "pointer",
     fontSize: "16px",
+  },
+
+  signupText: {
+    marginTop: "20px",
   },
 };

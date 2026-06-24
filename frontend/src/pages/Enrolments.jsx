@@ -1,30 +1,78 @@
 import Layout from "../components/Layout";
 import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
 
 export default function Enrolments() {
+  const [enrolments, setEnrolments] = useState([]);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    const savedEnrolments = JSON.parse(localStorage.getItem("enrolments")) || [];
+    setEnrolments(savedEnrolments);
+  }, []);
+
+  const deleteEnrolment = (enrolmentId) => {
+    const confirmDelete = window.confirm("Delete this enrolment?");
+
+    if (!confirmDelete) return;
+
+    const updatedEnrolments = enrolments.filter(
+      (enrolment) => enrolment.enrolmentId !== enrolmentId
+    );
+
+    localStorage.setItem("enrolments", JSON.stringify(updatedEnrolments));
+    setEnrolments(updatedEnrolments);
+  };
+
+  const filteredEnrolments = enrolments.filter(
+    (enrolment) =>
+      (enrolment.studentNo || "").toLowerCase().includes(search.toLowerCase()) ||
+      (enrolment.studentName || "").toLowerCase().includes(search.toLowerCase()) ||
+      (enrolment.programme || "").toLowerCase().includes(search.toLowerCase()) ||
+      (enrolment.level || "").toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
     <Layout>
       <div style={styles.container}>
         <div style={styles.header}>
-          <h1>Enrolments</h1>
+          <div>
+            <h1 style={styles.title}>Enrolments</h1>
+            <p style={styles.subtitle}>
+              Manage student programme enrolments and academic status
+            </p>
+          </div>
 
           <Link to="/enrolments/add">
-            <button style={styles.addBtn}>
-              + New Enrolment
-            </button>
+            <button style={styles.addBtn}>+ New Enrolment</button>
           </Link>
+        </div>
+
+        <div style={styles.cards}>
+          <div style={styles.card}>
+            <h3>Total Enrolments</h3>
+            <h1>{enrolments.length}</h1>
+          </div>
+
+          <div style={styles.card}>
+            <h3>Active Enrolments</h3>
+            <h1>{enrolments.filter((item) => item.status === "Active").length}</h1>
+          </div>
+
+          <div style={styles.cardWarning}>
+            <h3>Deferred</h3>
+            <h1>{enrolments.filter((item) => item.status === "Deferred").length}</h1>
+          </div>
         </div>
 
         <div style={styles.searchSection}>
           <input
             type="text"
-            placeholder="Search enrolment..."
+            placeholder="Search by student number, name, programme, or level..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
             style={styles.searchInput}
           />
-
-          <button style={styles.searchBtn}>
-            Search
-          </button>
         </div>
 
         <div style={styles.tableCard}>
@@ -34,45 +82,61 @@ export default function Enrolments() {
                 <th>Student No</th>
                 <th>Student Name</th>
                 <th>Programme</th>
+                <th>Faculty</th>
                 <th>Level</th>
-                <th>Date</th>
+                <th>Enrolment Date</th>
                 <th>Status</th>
-                <th>Action</th>
+                <th>View</th>
+                <th>Delete</th>
               </tr>
             </thead>
 
             <tbody>
-              <tr>
-                <td>STU001</td>
-                <td>Kabelo Mokoena</td>
-                <td>Electrical Engineering</td>
-                <td>N6</td>
-                <td>15/01/2026</td>
-                <td>Active</td>
-                <td>
-                  <Link to="/enrolments/details">
-                    <button style={styles.viewBtn}>
-                      View
-                    </button>
-                  </Link>
-                </td>
-              </tr>
+              {filteredEnrolments.length === 0 && (
+                <tr>
+                  <td colSpan="9" style={styles.empty}>
+                    Enrolment records will appear here once added or connected to the backend.
+                  </td>
+                </tr>
+              )}
 
-              <tr>
-                <td>STU002</td>
-                <td>Neo Phiri</td>
-                <td>Business Management</td>
-                <td>N4</td>
-                <td>15/01/2026</td>
-                <td>Active</td>
-                <td>
-                  <Link to="/enrolments/details">
-                    <button style={styles.viewBtn}>
-                      View
+              {filteredEnrolments.map((enrolment) => (
+                <tr key={enrolment.enrolmentId}>
+                  <td>{enrolment.studentNo}</td>
+                  <td>{enrolment.studentName}</td>
+                  <td>{enrolment.programme}</td>
+                  <td>{enrolment.faculty}</td>
+                  <td>{enrolment.level}</td>
+                  <td>{enrolment.enrolmentDate}</td>
+
+                  <td>
+                    <span
+                      style={
+                        enrolment.status === "Active"
+                          ? styles.activeBadge
+                          : styles.warningBadge
+                      }
+                    >
+                      {enrolment.status}
+                    </span>
+                  </td>
+
+                  <td>
+                    <Link to={`/enrolments/details/${enrolment.enrolmentId}`}>
+                      <button style={styles.viewBtn}>View</button>
+                    </Link>
+                  </td>
+
+                  <td>
+                    <button
+                      style={styles.deleteBtn}
+                      onClick={() => deleteEnrolment(enrolment.enrolmentId)}
+                    >
+                      Delete
                     </button>
-                  </Link>
-                </td>
-              </tr>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -82,63 +146,89 @@ export default function Enrolments() {
 }
 
 const styles = {
-  container: {
-    padding: "20px",
-    background: "#f5f6fa",
-    minHeight: "100vh",
-  },
-
+  container: { background: "#f5f6fa", minHeight: "100vh" },
   header: {
     display: "flex",
     justifyContent: "space-between",
-    marginBottom: "20px",
+    alignItems: "center",
+    marginBottom: "25px",
   },
-
+  title: { margin: 0, color: "#111827" },
+  subtitle: { marginTop: "6px", color: "#6b7280" },
   addBtn: {
-    background: "#2563eb",
+    background: "#1e3a8a",
     color: "#fff",
     border: "none",
-    padding: "10px 15px",
-    borderRadius: "6px",
+    padding: "12px 18px",
+    borderRadius: "8px",
+    cursor: "pointer",
+    fontWeight: "600",
   },
-
-  searchSection: {
-    display: "flex",
-    gap: "10px",
-    marginBottom: "20px",
+  cards: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3,1fr)",
+    gap: "20px",
+    marginBottom: "25px",
   },
-
+  card: {
+    background: "#fff",
+    padding: "20px",
+    borderRadius: "12px",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+  },
+  cardWarning: {
+    background: "#ffedd5",
+    padding: "20px",
+    borderRadius: "12px",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+  },
+  searchSection: { marginBottom: "20px" },
   searchInput: {
-    flex: 1,
-    padding: "10px",
-    borderRadius: "6px",
-    border: "1px solid #ccc",
+    width: "100%",
+    padding: "12px",
+    borderRadius: "8px",
+    border: "1px solid #d1d5db",
+    outline: "none",
   },
-
-  searchBtn: {
-    background: "#111827",
-    color: "#fff",
-    border: "none",
-    padding: "10px 20px",
-    borderRadius: "6px",
-  },
-
   tableCard: {
     background: "#fff",
     padding: "20px",
-    borderRadius: "10px",
+    borderRadius: "12px",
+    overflowX: "auto",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
   },
-
-  table: {
-    width: "100%",
-    borderCollapse: "collapse",
+  table: { width: "100%", borderCollapse: "collapse" },
+  activeBadge: {
+    background: "#dcfce7",
+    color: "#166534",
+    padding: "6px 12px",
+    borderRadius: "20px",
+    fontWeight: "600",
   },
-
+  warningBadge: {
+    background: "#ffedd5",
+    color: "#9a3412",
+    padding: "6px 12px",
+    borderRadius: "20px",
+    fontWeight: "600",
+  },
   viewBtn: {
-    background: "#2563eb",
+    background: "#1e3a8a",
     color: "#fff",
     border: "none",
-    padding: "6px 12px",
-    borderRadius: "5px",
+    padding: "8px 12px",
+    borderRadius: "6px",
+    cursor: "pointer",
+    fontWeight: "600",
   },
+  deleteBtn: {
+    background: "#dc2626",
+    color: "#fff",
+    border: "none",
+    padding: "8px 12px",
+    borderRadius: "6px",
+    cursor: "pointer",
+    fontWeight: "600",
+  },
+  empty: { textAlign: "center", padding: "25px", color: "#6b7280" },
 };
