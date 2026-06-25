@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import Layout from "../components/Layout";
 import { apiFetch } from "../api";
@@ -11,18 +11,38 @@ export default function Enrolments() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [total, setTotal] = useState(0);
+  const [totalActive, setTotalActive] = useState(0);
+  const [totalCompleted, setTotalCompleted] = useState(0);
+  const [totalWithdrawn, setTotalWithdrawn] = useState(0);
   const [page, setPage] = useState(1);
+  const [showAddMenu, setShowAddMenu] = useState(false);
+  const addMenuRef = useRef(null);
   const limit = 20;
 
   const role = localStorage.getItem("role");
 
-  useEffect(() => { fetchEnrolments(); }, [page, statusFilter]);
+  useEffect(() => {
+    fetchEnrolments();
+    fetchTotals();
+  }, [page, statusFilter, search]);
+
+  // Close add menu when clicking outside
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (addMenuRef.current && !addMenuRef.current.contains(e.target)) {
+        setShowAddMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
 
   const fetchEnrolments = async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ page, limit });
       if (statusFilter) params.append("status", statusFilter);
+      if (search) params.append("search", search);
       const response = await apiFetch(`/enrolments/?${params}`);
       if (response.status === 401) { localStorage.clear(); navigate("/"); return; }
       const data = await response.json();
@@ -35,35 +55,42 @@ export default function Enrolments() {
     }
   };
 
+  const fetchTotals = async () => {
+    try {
+      const [activeRes, completedRes, withdrawnRes] = await Promise.all([
+        apiFetch("/enrolments/?status=Active&limit=1"),
+        apiFetch("/enrolments/?status=Completed&limit=1"),
+        apiFetch("/enrolments/?status=Withdrawn&limit=1"),
+      ]);
+      const [a, c, w] = await Promise.all([
+        activeRes.json(), completedRes.json(), withdrawnRes.json()
+      ]);
+      setTotalActive(a.total);
+      setTotalCompleted(c.total);
+      setTotalWithdrawn(w.total);
+    } catch {}
+  };
+
   const handleWithdraw = async (id) => {
-    if (!window.confirm("Are you sure you want to withdraw this enrolment? This cannot be undone.")) return;
+    if (!window.confirm("Are you sure you want to withdraw this enrolment?")) return;
     try {
       const today = new Date().toISOString().split("T")[0];
       const response = await apiFetch(`/enrolments/${id}`, {
         method: "PUT",
         body: JSON.stringify({ status: "Withdrawn", completion_date: today }),
       });
-      if (response.ok) fetchEnrolments();
+      if (response.ok) { fetchEnrolments(); fetchTotals(); }
       else alert("Failed to withdraw enrolment.");
     } catch {
       alert("Could not connect to server.");
     }
   };
 
-  // Client-side search filter on loaded data
-  const filtered = enrolments.filter(e =>
-    (e.student_name || "").toLowerCase().includes(search.toLowerCase()) ||
-    (e.student_no || "").toLowerCase().includes(search.toLowerCase()) ||
-    (e.course_name || "").toLowerCase().includes(search.toLowerCase()) ||
-    (e.course_code || "").toLowerCase().includes(search.toLowerCase())
-  );
-
-  const summary = {
-    total: enrolments.length,
-    active: enrolments.filter(e => e.status === "Active").length,
-    completed: enrolments.filter(e => e.status === "Completed").length,
-    withdrawn: enrolments.filter(e => e.status === "Withdrawn").length,
-  };
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => { setPage(1); }, 400);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const statusColor = (status) => ({
     Active: { bg: "#dcfce7", text: "#166534" },
@@ -80,9 +107,27 @@ export default function Enrolments() {
             <p style={styles.subtitle}>Manage student course enrolments</p>
           </div>
           {(role === "Admin" || role === "DB Admin") && (
-            <Link to="/enrolments/add">
-              <button style={styles.addBtn}>+ New Enrolment</button>
-            </Link>
+            <div style={styles.addWrapper} ref={addMenuRef}>
+              <button
+                style={styles.addBtn}
+                onClick={() => setShowAddMenu(!showAddMenu)}
+              >
+                + Add ▾
+              </button>
+              {showAddMenu && (
+                <div style={styles.addMenu}>
+                  <Link to="/students/add" style={styles.addMenuItem} onClick={() => setShowAddMenu(false)}>
+                    <strong>New Student</strong>
+                    <span style={styles.addMenuDesc}>Register a new student</span>
+                  </Link>
+                  <div style={styles.addMenuDivider} />
+                  <Link to="/enrolments/add" style={styles.addMenuItem} onClick={() => setShowAddMenu(false)}>
+                    <strong>New Enrolment</strong>
+                    <span style={styles.addMenuDesc}>Enrol an existing student</span>
+                  </Link>
+                </div>
+              )}
+            </div>
           )}
         </div>
 
@@ -90,9 +135,9 @@ export default function Enrolments() {
         <div style={styles.cards}>
           {[
             { label: "Total", value: total },
-            { label: "Active", value: summary.active },
-            { label: "Completed", value: summary.completed },
-            { label: "Withdrawn", value: summary.withdrawn },
+            { label: "Active", value: totalActive },
+            { label: "Completed", value: totalCompleted },
+            { label: "Withdrawn", value: totalWithdrawn },
           ].map((item, i) => (
             <div key={i} style={styles.card}>
               <h3 style={styles.cardLabel}>{item.label}</h3>
@@ -110,7 +155,11 @@ export default function Enrolments() {
             onChange={(e) => setSearch(e.target.value)}
             style={styles.searchInput}
           />
-          <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }} style={styles.filterSelect}>
+          <select
+            value={statusFilter}
+            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+            style={styles.filterSelect}
+          >
             <option value="">All Statuses</option>
             <option value="Active">Active</option>
             <option value="Completed">Completed</option>
@@ -138,20 +187,26 @@ export default function Enrolments() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 ? (
+                {enrolments.length === 0 ? (
                   <tr><td colSpan="8" style={styles.empty}>No enrolments found.</td></tr>
                 ) : (
-                  filtered.map((e) => {
+                  enrolments.map((e) => {
                     const sc = statusColor(e.status);
                     return (
                       <tr key={e.id}>
                         <td style={styles.td}>{e.student_no}</td>
                         <td style={styles.td}>{e.student_name}</td>
-                        <td style={styles.td}>{e.course_name}<br /><span style={{ color: "#6b7280", fontSize: "12px" }}>{e.course_code}</span></td>
+                        <td style={styles.td}>
+                          {e.course_name}
+                          <br />
+                          <span style={{ color: "#6b7280", fontSize: "12px" }}>{e.course_code}</span>
+                        </td>
                         <td style={styles.td}>{e.enrolment_date}</td>
                         <td style={styles.td}>{e.completion_date || "—"}</td>
                         <td style={styles.td}>
-                          <span style={{ ...styles.badge, background: sc.bg, color: sc.text }}>{e.status}</span>
+                          <span style={{ ...styles.badge, background: sc.bg, color: sc.text }}>
+                            {e.status}
+                          </span>
                         </td>
                         <td style={styles.td}>
                           {e.has_certificate
@@ -180,12 +235,15 @@ export default function Enrolments() {
           )}
         </div>
 
-        {/* Pagination */}
         {total > limit && (
           <div style={styles.pagination}>
-            <button style={styles.pageBtn} onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>Previous</button>
+            <button style={styles.pageBtn} onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
+              Previous
+            </button>
             <span style={styles.pageInfo}>Page {page} — {total} total</span>
-            <button style={styles.pageBtn} onClick={() => setPage(p => p + 1)} disabled={enrolments.length < limit}>Next</button>
+            <button style={styles.pageBtn} onClick={() => setPage(p => p + 1)} disabled={enrolments.length < limit}>
+              Next
+            </button>
           </div>
         )}
       </div>
@@ -198,7 +256,12 @@ const styles = {
   header: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "25px" },
   title: { margin: 0, color: "#111827" },
   subtitle: { marginTop: "6px", color: "#6b7280", margin: "6px 0 0 0" },
+  addWrapper: { position: "relative" },
   addBtn: { background: "#1e3a8a", color: "#fff", border: "none", padding: "12px 18px", borderRadius: "8px", cursor: "pointer", fontWeight: "600" },
+  addMenu: { position: "absolute", right: 0, top: "calc(100% + 8px)", background: "#fff", borderRadius: "12px", boxShadow: "0 4px 20px rgba(0,0,0,0.12)", border: "1px solid #e5e7eb", zIndex: 20, minWidth: "220px", overflow: "hidden" },
+  addMenuItem: { display: "flex", flexDirection: "column", gap: "2px", padding: "14px 16px", textDecoration: "none", color: "#111827", cursor: "pointer" },
+  addMenuDesc: { fontSize: "12px", color: "#6b7280", fontWeight: "400" },
+  addMenuDivider: { height: "1px", background: "#f3f4f6" },
   cards: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px", marginBottom: "25px" },
   card: { background: "#fff", padding: "20px", borderRadius: "12px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" },
   cardLabel: { color: "#6b7280", fontSize: "14px", margin: "0 0 8px 0" },
