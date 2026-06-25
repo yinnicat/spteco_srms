@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, case
 from database import get_db
 from routers.auth import get_current_user, require_roles
 import models
@@ -153,7 +153,17 @@ def get_students(
         )
 
     total = query.count()
-    students = query.offset((page - 1) * limit).limit(limit).all()
+    students = query.order_by(
+    case(
+        (models.Student.status == "Active", 0),
+        (models.Student.status == "Suspended", 1),
+        (models.Student.status == "Completed", 2),
+        (models.Student.status == "Withdrawn", 3),
+        else_=4
+    ),
+    models.Student.last_name.asc(),
+    models.Student.first_name.asc()
+).offset((page - 1) * limit).limit(limit).all()
     return {
         "total": total,
         "page": page,
