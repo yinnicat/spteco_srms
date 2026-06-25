@@ -26,6 +26,7 @@ import Reports from "./pages/Reports";
 import Users from "./pages/Users";
 import DataMigration from "./pages/DataMigration";
 import Settings from "./pages/Settings";
+import Modules from "./pages/Modules";
 
 function App() {
   return (
@@ -53,7 +54,8 @@ function App() {
         <Route path="/certificates" element={<ProtectedRoute><Certificates /></ProtectedRoute>} />
         <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-
+        <Route path="/modules" element={<ProtectedRoute><Modules /></ProtectedRoute>} />
+        
         {/* Admin and DB Admin only */}
         <Route path="/students/add" element={<ProtectedRoute allowedRoles={["Admin", "DB Admin"]}><AddStudent /></ProtectedRoute>} />
         <Route path="/staff/add" element={<ProtectedRoute allowedRoles={["Admin", "DB Admin"]}><AddStaff /></ProtectedRoute>} />

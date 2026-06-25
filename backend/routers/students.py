@@ -119,6 +119,7 @@ def format_student(student):
 def get_students(
     search: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
+    course_id: Optional[int] = Query(None),
     sen: Optional[bool] = Query(None),
     ovc: Optional[bool] = Query(None),
     page: int = Query(1, ge=1),
@@ -127,6 +128,7 @@ def get_students(
     current_user: models.SystemUser = Depends(get_current_user)
 ):
     query = db.query(models.Student)
+
     if search:
         query = query.filter(or_(
             models.Student.first_name.ilike(f"%{search}%"),
@@ -140,6 +142,16 @@ def get_students(
         query = query.filter(models.Student.sen == sen)
     if ovc is not None:
         query = query.filter(models.Student.ovc == ovc)
+
+    # Filter by course via enrolments
+    if course_id:
+        query = query.join(
+            models.Enrolment,
+            models.Enrolment.student_id == models.Student.id
+        ).filter(
+            models.Enrolment.course_id == course_id,
+        )
+
     total = query.count()
     students = query.offset((page - 1) * limit).limit(limit).all()
     return {
@@ -210,9 +222,13 @@ def update_student_status(
     db: Session = Depends(get_db),
     current_user: models.SystemUser = Depends(require_roles("Admin", "DB Admin"))
 ):
-    allowed = ["Active", "Inactive", "Graduated", "Suspended", "Withdrawn"]
+    # Active and Completed are system managed — only allow manual override for Suspended and Withdrawn
+    allowed = ["Suspended", "Withdrawn"]
     if data.status not in allowed:
-        raise HTTPException(status_code=400, detail=f"Status must be one of {allowed}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Status '{data.status}' cannot be set manually. Only Suspended and Withdrawn are allowed. Active and Completed are managed automatically by the system."
+        )
     student = db.query(models.Student).filter(models.Student.id == student_id).first()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")

@@ -73,7 +73,6 @@ export default function AttendanceAnalytics() {
           <FaChartLine style={{ fontSize: "40px", color: "#1e3a8a" }} />
         </div>
 
-        {/* Summary cards */}
         <div style={styles.cards}>
           <div style={styles.card}>
             <h3 style={styles.cardLabel}>Total At-Risk</h3>
@@ -83,9 +82,7 @@ export default function AttendanceAnalytics() {
           </div>
           <div style={styles.card}>
             <h3 style={styles.cardLabel}>Modules Affected</h3>
-            <h2 style={styles.cardValue}>
-              {new Set(atRisk.map(s => s.module_id)).size}
-            </h2>
+            <h2 style={styles.cardValue}>{new Set(atRisk.map(s => s.module_id)).size}</h2>
           </div>
           <div style={styles.card}>
             <h3 style={styles.cardLabel}>Status</h3>
@@ -98,7 +95,6 @@ export default function AttendanceAnalytics() {
           </div>
         </div>
 
-        {/* Filters */}
         <div style={styles.filterRow}>
           <select value={moduleFilter} onChange={e => setModuleFilter(e.target.value)} style={styles.filterSelect}>
             <option value="">All Modules</option>
@@ -132,6 +128,8 @@ export default function AttendanceAnalytics() {
                     <th style={styles.th}>Name</th>
                     <th style={styles.th}>Module</th>
                     <th style={styles.th}>Hours Attended</th>
+                    <th style={styles.th}>Total Hours So Far</th>
+                    <th style={styles.th}>Required Hours</th>
                     <th style={styles.th}>Threshold</th>
                     <th style={styles.th}>Attendance %</th>
                     <th style={styles.th}>Profile</th>
@@ -139,7 +137,7 @@ export default function AttendanceAnalytics() {
                 </thead>
                 <tbody>
                   {atRisk.length === 0 ? (
-                    <tr><td colSpan="7" style={styles.empty}>No at-risk students found for the selected filters.</td></tr>
+                    <tr><td colSpan="9" style={styles.empty}>No at-risk students found.</td></tr>
                   ) : (
                     atRisk.map((s, i) => (
                       <tr key={i}>
@@ -147,7 +145,11 @@ export default function AttendanceAnalytics() {
                         <td style={styles.td}>{s.student_name}</td>
                         <td style={styles.td}>{s.module_name}</td>
                         <td style={styles.td}>{s.hours_attended} hrs</td>
-                        <td style={styles.td}>{s.attendance_threshold} hrs</td>
+                        <td style={styles.td}>{s.total_hours} hrs</td>
+                        <td style={styles.td}>{s.required_hours} hrs</td>
+                        <td style={styles.td}>
+                          {s.attendance_threshold} hrs ({s.threshold_percentage}%)
+                        </td>
                         <td style={styles.td}>
                           <span style={{
                             ...styles.badge,

@@ -1,7 +1,7 @@
 -- ============================================================================
 -- SELEBI-PHIKWE TECHNICAL COLLEGE (SPTECO)
 -- STUDENT RECORDS MANAGEMENT SYSTEM (SRMS) - PRODUCTION MASTER SCHEMA
--- POSTGRESQL COMPATIBLE | VERSION 6.0 | JUNE 2026
+-- POSTGRESQL COMPATIBLE | VERSION 7.0 | JUNE 2026
 -- ============================================================================
 
 -- ============================================================================
@@ -9,6 +9,7 @@
 -- ============================================================================
 DROP TABLE IF EXISTS audit_log CASCADE;
 DROP TABLE IF EXISTS attendance CASCADE;
+DROP TABLE IF EXISTS module_assignments CASCADE;
 DROP TABLE IF EXISTS sessions CASCADE;
 DROP TABLE IF EXISTS modules CASCADE;
 DROP TABLE IF EXISTS certificate_issuance CASCADE;
@@ -21,10 +22,9 @@ DROP TABLE IF EXISTS courses CASCADE;
 DROP TABLE IF EXISTS departments CASCADE;
 
 -- ============================================================================
--- GLOBAL HELPER FUNCTIONS & PROCEDURES
+-- GLOBAL HELPER FUNCTIONS
 -- ============================================================================
 
--- Automatically updates modification timestamps for audited records
 CREATE OR REPLACE FUNCTION update_modified_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -33,7 +33,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Modern Fail-Fast Immutability Guard for Ledger Integrity
 CREATE OR REPLACE FUNCTION block_audit_alteration()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -41,22 +40,21 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-
 -- ============================================================================
--- DATA SCHEMA DEFINITION (Correct Dependent Layering Order)
+-- SCHEMA DEFINITION
 -- ============================================================================
 
--- 1. DEPARTMENTS TABLE
+-- 1. DEPARTMENTS
 CREATE TABLE departments (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL UNIQUE,
     is_active BOOLEAN NOT NULL DEFAULT TRUE
 );
 
--- 2. COURSES TABLE
+-- 2. COURSES
 CREATE TABLE courses (
     id SERIAL PRIMARY KEY,
-    course_code VARCHAR(50) NOT NULL UNIQUE, -- Format Example: 'AUT-01' (Automotive), 'CON-03' (Construction)
+    course_code VARCHAR(50) NOT NULL UNIQUE,
     course_name VARCHAR(255) NOT NULL,
     course_level INTEGER NULL,
     department_id INTEGER NULL REFERENCES departments(id) ON DELETE SET NULL,
@@ -64,16 +62,14 @@ CREATE TABLE courses (
     programme_type VARCHAR(50) NULL,
     description TEXT NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    
-    -- Structural Constraints
     CONSTRAINT chk_courses_duration_positive CHECK (duration_yrs > 0),
     CONSTRAINT chk_programme_type CHECK (programme_type IN ('Long Term', 'Short Term'))
 );
 
--- 3. STUDENTS TABLE
+-- 3. STUDENTS
 CREATE TABLE students (
     id SERIAL PRIMARY KEY,
-    student_no VARCHAR(50) NOT NULL UNIQUE, -- System Generated. Format Example: 'SPT2026-0001'
+    student_no VARCHAR(50) NOT NULL UNIQUE,
     first_name VARCHAR(100) NOT NULL,
     other_name VARCHAR(100) NULL,
     last_name VARCHAR(100) NOT NULL,
@@ -81,7 +77,7 @@ CREATE TABLE students (
     dob DATE NULL,
     place_of_birth VARCHAR(150) NULL,
     nationality VARCHAR(100) NULL,
-    omang VARCHAR(50) NULL, -- Kept non-unique at DB tier to safely handle messy historical data migrations
+    omang VARCHAR(50) NULL,
     passport VARCHAR(50) NULL,
     email VARCHAR(150) NULL,
     tel_no VARCHAR(50) NULL,
@@ -94,8 +90,6 @@ CREATE TABLE students (
     sen BOOLEAN NOT NULL DEFAULT FALSE,
     ovc BOOLEAN NOT NULL DEFAULT FALSE,
     status VARCHAR(20) NOT NULL DEFAULT 'Active',
-    
-    -- Explicit Academic & Trade Prerequisite Screening Grid
     english_grade VARCHAR(5) NULL,
     maths_grade VARCHAR(5) NULL,
     science_grade VARCHAR(5) NULL,
@@ -104,24 +98,19 @@ CREATE TABLE students (
     technical_drawing_grade VARCHAR(5) NULL,
     practical_grade VARCHAR(5) NULL,
     associated_studies_grade VARCHAR(5) NULL,
-    
-    -- Ministry Intake Form Field Alignment
     other_subjects_summary TEXT NULL,
     relevant_experience TEXT NULL,
-    
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    
-    -- Domain Value Data Integrity Constraints
     CONSTRAINT chk_student_gender CHECK (gender IN ('Male', 'Female', 'Other')),
-    CONSTRAINT chk_student_status CHECK (status IN ('Active', 'Inactive', 'Graduated', 'Suspended', 'Withdrawn'))
+    CONSTRAINT chk_student_status CHECK (status IN ('Active', 'Completed', 'Suspended', 'Withdrawn'))
 );
 
-CREATE TRIGGER update_students_modtime 
-    BEFORE UPDATE ON students 
+CREATE TRIGGER update_students_modtime
+    BEFORE UPDATE ON students
     FOR EACH ROW EXECUTE FUNCTION update_modified_column();
 
--- 4. NEXT OF KIN TABLE
+-- 4. NEXT OF KIN
 CREATE TABLE next_of_kin (
     id SERIAL PRIMARY KEY,
     student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
@@ -133,10 +122,10 @@ CREATE TABLE next_of_kin (
     email VARCHAR(150) NULL
 );
 
--- 5. STAFF TABLE
+-- 5. STAFF
 CREATE TABLE staff (
     id SERIAL PRIMARY KEY,
-    staff_no VARCHAR(50) NOT NULL UNIQUE, -- System Generated. Format Example: 'SPS-001'
+    staff_no VARCHAR(50) NOT NULL UNIQUE,
     first_name VARCHAR(100) NOT NULL,
     last_name VARCHAR(100) NOT NULL,
     gender VARCHAR(20) NULL,
@@ -149,34 +138,29 @@ CREATE TABLE staff (
     status VARCHAR(20) NOT NULL DEFAULT 'Active',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    
-    -- Domain Value Data Integrity Constraints
     CONSTRAINT chk_staff_gender CHECK (gender IN ('Male', 'Female', 'Other')),
     CONSTRAINT chk_staff_status CHECK (status IN ('Active', 'Inactive'))
 );
 
-CREATE TRIGGER update_staff_modtime 
-    BEFORE UPDATE ON staff 
+CREATE TRIGGER update_staff_modtime
+    BEFORE UPDATE ON staff
     FOR EACH ROW EXECUTE FUNCTION update_modified_column();
 
--- 6. SYSTEM USERS TABLE (Security Authorization Layer)
+-- 6. SYSTEM USERS
 CREATE TABLE system_users (
     id SERIAL PRIMARY KEY,
     staff_id INTEGER NOT NULL UNIQUE REFERENCES staff(id) ON DELETE CASCADE,
     username VARCHAR(100) NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL, 
-    role VARCHAR(50) NOT NULL, -- Enforces routing privileges: 'Admin', 'Lecturer', 'DB Admin'
+    password_hash TEXT NOT NULL,
+    role VARCHAR(50) NOT NULL,
     last_login TIMESTAMP NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    
-    -- Domain Access Safety Constraints
     CONSTRAINT chk_user_role CHECK (role IN ('Admin', 'Lecturer', 'DB Admin'))
 );
 
--- Case-insensitive unique index on username
 CREATE UNIQUE INDEX uq_username_lower ON system_users (LOWER(username));
 
--- 7. ENROLMENTS TABLE
+-- 7. ENROLMENTS
 CREATE TABLE enrolments (
     id SERIAL PRIMARY KEY,
     student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE RESTRICT,
@@ -186,8 +170,6 @@ CREATE TABLE enrolments (
     status VARCHAR(50) NOT NULL DEFAULT 'Active',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    
-    -- Domain Data Integrity, Completion Logic, and Timeline Constraints
     CONSTRAINT chk_enrolment_status CHECK (status IN ('Active', 'Completed', 'Withdrawn')),
     CONSTRAINT chk_enrolment_completion_logic CHECK (
         (status = 'Active' AND completion_date IS NULL) OR
@@ -198,11 +180,11 @@ CREATE TABLE enrolments (
     )
 );
 
-CREATE TRIGGER update_enrolments_modtime 
-    BEFORE UPDATE ON enrolments 
+CREATE TRIGGER update_enrolments_modtime
+    BEFORE UPDATE ON enrolments
     FOR EACH ROW EXECUTE FUNCTION update_modified_column();
 
--- 8. CERTIFICATE ISSUANCE TABLE
+-- 8. CERTIFICATE ISSUANCE
 CREATE TABLE certificate_issuance (
     id SERIAL PRIMARY KEY,
     enrolment_id INTEGER NOT NULL UNIQUE REFERENCES enrolments(id) ON DELETE RESTRICT,
@@ -212,8 +194,6 @@ CREATE TABLE certificate_issuance (
     confirmed_by INTEGER NULL REFERENCES staff(id) ON DELETE SET NULL,
     notes TEXT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    
-    -- Verification and Collection Timeline Constraints
     CONSTRAINT chk_certificate_collection_logic CHECK (
         (collected = FALSE AND collection_date IS NULL) OR
         (collected = TRUE AND collection_date IS NOT NULL)
@@ -223,29 +203,27 @@ CREATE TABLE certificate_issuance (
     )
 );
 
--- 9. MODULES TABLE
+-- 9. MODULES
 CREATE TABLE modules (
     id SERIAL PRIMARY KEY,
     course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE RESTRICT,
-    module_code VARCHAR(50) NOT NULL UNIQUE, -- Format Example: 'AM-01' (Engine Maintenance)
+    module_code VARCHAR(50) NOT NULL UNIQUE,
     module_name VARCHAR(255) NOT NULL,
     required_hours NUMERIC(5,2) NOT NULL,
-    attendance_threshold NUMERIC(5,2) NOT NULL, -- Min hours student must attend. Set during creation. Default = 80% of required_hours.
+    attendance_threshold NUMERIC(5,2) NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    
-    -- Sanity Constraints
     CONSTRAINT chk_modules_hours_positive CHECK (required_hours > 0),
     CONSTRAINT chk_attendance_threshold_positive CHECK (attendance_threshold > 0),
     CONSTRAINT chk_threshold_lte_required CHECK (attendance_threshold <= required_hours)
 );
 
-CREATE TRIGGER update_modules_modtime 
-    BEFORE UPDATE ON modules 
+CREATE TRIGGER update_modules_modtime
+    BEFORE UPDATE ON modules
     FOR EACH ROW EXECUTE FUNCTION update_modified_column();
 
--- 10. SESSIONS TABLE (Attendance Ledger Event Logs)
+-- 10. SESSIONS
 CREATE TABLE sessions (
     id SERIAL PRIMARY KEY,
     module_id INTEGER NOT NULL REFERENCES modules(id) ON DELETE RESTRICT,
@@ -253,19 +231,16 @@ CREATE TABLE sessions (
     date DATE NOT NULL,
     start_time TIME NOT NULL,
     end_time TIME NOT NULL,
-    duration_hours NUMERIC(4,2) NOT NULL, -- Precise validation left to application logic
+    duration_hours NUMERIC(4,2) NOT NULL,
     room VARCHAR(50) NULL,
     semester VARCHAR(20) NULL,
     academic_year VARCHAR(10) NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    
-    -- Timeline Integrity Constraints
     CONSTRAINT chk_session_time_order CHECK (end_time > start_time),
     CONSTRAINT chk_session_duration_positive CHECK (duration_hours > 0)
 );
 
-
--- 10.1 MODULE ASSIGNMENTS TABLE (Lecturer-Module History)
+-- 10.1 MODULE ASSIGNMENTS
 CREATE TABLE module_assignments (
     id SERIAL PRIMARY KEY,
     module_id INTEGER NOT NULL REFERENCES modules(id) ON DELETE RESTRICT,
@@ -274,26 +249,23 @@ CREATE TABLE module_assignments (
     semester VARCHAR(20) NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
     CONSTRAINT chk_academic_year_format CHECK (academic_year ~ '^[0-9]{4}$')
 );
 
--- 11. ATTENDANCE TABLE
+-- 11. ATTENDANCE
 CREATE TABLE attendance (
     id SERIAL PRIMARY KEY,
     session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
     marked_by INTEGER NULL REFERENCES staff(id) ON DELETE SET NULL,
-    status VARCHAR(20) NOT NULL, -- Values: Present, Absent, Late, Excused
+    status VARCHAR(20) NOT NULL,
     marked_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     notes TEXT NULL,
-    
-    -- Constraints & Allowed State Values
     CONSTRAINT unique_session_student UNIQUE (session_id, student_id),
     CONSTRAINT chk_attendance_status CHECK (status IN ('Present', 'Absent', 'Late', 'Excused'))
 );
 
--- 12. IMMUTABLE AUDIT LOG TABLE
+-- 12. AUDIT LOG
 CREATE TABLE audit_log (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NULL REFERENCES system_users(id) ON DELETE SET NULL,
@@ -303,27 +275,22 @@ CREATE TABLE audit_log (
     old_value TEXT NULL,
     new_value TEXT NULL,
     performed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    
     CONSTRAINT chk_audit_action CHECK (action IN ('INSERT', 'UPDATE', 'DELETE'))
 );
 
--- Fail-Fast Enforcement Guard Binded to Audit Log Ledger
 CREATE TRIGGER enforce_audit_immutability
     BEFORE UPDATE OR DELETE ON audit_log
     FOR EACH ROW
     EXECUTE FUNCTION block_audit_alteration();
 
-
 -- ============================================================================
--- OPTIMIZATION PARTIAL INDEXES & NETWORK PERFORMANCE ACCELERATORS
+-- INDEXES
 -- ============================================================================
 
--- Partial Unique Index: Prevents simultaneous active enrollments in the same course
-CREATE UNIQUE INDEX uq_active_enrolment 
-ON enrolments(student_id, course_id) 
+CREATE UNIQUE INDEX uq_active_enrolment
+ON enrolments(student_id, course_id)
 WHERE status = 'Active';
 
--- High-Frequency Join and Scan Query Performance Accelerators
 CREATE INDEX idx_attendance_student ON attendance(student_id);
 CREATE INDEX idx_attendance_session ON attendance(session_id);
 CREATE INDEX idx_sessions_module ON sessions(module_id);

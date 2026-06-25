@@ -36,6 +36,51 @@ def format_enrolment(e):
         "has_certificate": e.certificate is not None,
     }
 
+def sync_student_status(student_id: int, db: Session):
+    """Auto-update student status based on their enrolment statuses."""
+    active_count = db.query(models.Enrolment).filter(
+        models.Enrolment.student_id == student_id,
+        models.Enrolment.status == "Active"
+    ).count()
+
+    if active_count > 0:
+        return  # Still has active enrolments — leave as Active
+
+    completed_count = db.query(models.Enrolment).filter(
+        models.Enrolment.student_id == student_id,
+        models.Enrolment.status == "Completed"
+    ).count()
+
+    withdrawn_count = db.query(models.Enrolment).filter(
+        models.Enrolment.student_id == student_id,
+        models.Enrolment.status == "Withdrawn"
+    ).count()
+
+    student = db.query(models.Student).filter(models.Student.id == student_id).first()
+    if not student:
+        return
+
+    if completed_count > 0:
+        student.status = "Completed"
+    elif withdrawn_count > 0:
+        student.status = "Withdrawn"
+
+    db.commit()
+
+def auto_issue_certificate(enrolment_id: int, db: Session):
+    """Auto-issue a certificate when an enrolment is marked Completed."""
+    existing = db.query(models.CertificateIssuance).filter(
+        models.CertificateIssuance.enrolment_id == enrolment_id
+    ).first()
+    if existing:
+        return  # Already issued
+    cert = models.CertificateIssuance(
+        enrolment_id=enrolment_id,
+        issue_date=date.today(),
+        collected=False,
+    )
+    db.add(cert)
+
 @router.get("/")
 def get_enrolments(
     student_id: Optional[int] = Query(None),
@@ -92,6 +137,9 @@ def create_enrolment(
     ).first()
     if existing:
         raise HTTPException(status_code=400, detail="Student already has an active enrolment in this course")
+    # If student was Completed or Withdrawn and is re-enrolling, set back to Active
+    if student.status in ("Completed", "Withdrawn"):
+        student.status = "Active"
     enrolment = models.Enrolment(**data.dict())
     db.add(enrolment)
     db.commit()
@@ -111,8 +159,22 @@ def update_enrolment(
     allowed_statuses = ["Active", "Completed", "Withdrawn"]
     if data.status and data.status not in allowed_statuses:
         raise HTTPException(status_code=400, detail=f"Status must be one of {allowed_statuses}")
+
+    student_id = e.student_id
+    enrolment_id_ref = e.id
+
     for key, value in data.dict(exclude_unset=True).items():
         setattr(e, key, value)
     db.commit()
     db.refresh(e)
+
+    # Auto-sync student status after enrolment change
+    if data.status in ("Completed", "Withdrawn"):
+        sync_student_status(student_id, db)
+
+    # Auto-issue certificate on completion
+    if data.status == "Completed":
+        auto_issue_certificate(enrolment_id_ref, db)
+        db.commit()
+
     return format_enrolment(e)

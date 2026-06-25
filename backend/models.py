@@ -86,7 +86,7 @@ class NextOfKin(Base):
     student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
     name = Column(String(100), nullable=False)
     surname = Column(String(100), nullable=False)
-    relation = Column("relationship", String(50), nullable=False)
+    relation = Column("relation", String(50), nullable=False)
     tel_no = Column(String(50))
     cell_no = Column(String(50))
     email = Column(String(150))

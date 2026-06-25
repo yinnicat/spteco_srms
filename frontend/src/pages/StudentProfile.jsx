@@ -9,6 +9,7 @@ export default function StudentProfile() {
   const [student, setStudent] = useState(null);
   const [enrolments, setEnrolments] = useState([]);
   const [certificates, setCertificates] = useState([]);
+  const [attendance, setAttendance] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -18,7 +19,6 @@ export default function StudentProfile() {
 
   const fetchStudent = async () => {
     try {
-      // Search by student_no
       const response = await apiFetch(`/students/?search=${studentNo}`);
       if (response.status === 401) { localStorage.clear(); navigate("/"); return; }
       const data = await response.json();
@@ -26,15 +26,31 @@ export default function StudentProfile() {
       if (!found) { setError("Student not found."); return; }
       setStudent(found);
 
-      // Fetch enrolments
-      const enrolResponse = await apiFetch(`/enrolments/?student_id=${found.id}`);
-      const enrolData = await enrolResponse.json();
-      setEnrolments(enrolData.enrolments || []);
+      const [enrolRes, certRes, modRes] = await Promise.all([
+        apiFetch(`/enrolments/?student_id=${found.id}`),
+        apiFetch(`/certificates/?student_id=${found.id}`),
+        apiFetch("/modules/?is_active=true"),
+      ]);
 
-      // Fetch certificates
-      const certResponse = await apiFetch(`/certificates/?student_id=${found.id}`);
-      const certData = await certResponse.json();
+      const enrolData = await enrolRes.json();
+      const certData = await certRes.json();
+      const modData = await modRes.json();
+
+      const enrolList = enrolData.enrolments || [];
+      setEnrolments(enrolList);
       setCertificates(certData.certificates || []);
+
+      // Fetch attendance summary for each module in enrolled courses
+      const courseIds = [...new Set(enrolList.map(e => e.course_id))];
+      const relevantModules = modData.filter(m => courseIds.includes(m.course_id));
+      const attendanceSummaries = await Promise.all(
+        relevantModules.map(m =>
+          apiFetch(`/attendance/summary/${found.id}/module/${m.id}`)
+            .then(r => r.json())
+            .catch(() => null)
+        )
+      );
+      setAttendance(attendanceSummaries.filter(Boolean));
     } catch {
       setError("Failed to load student profile.");
     } finally {
@@ -43,7 +59,8 @@ export default function StudentProfile() {
   };
 
   const handleStatusChange = async (newStatus) => {
-    if (!window.confirm(`Are you sure you want to change this student's status to ${newStatus}?`)) return;
+    if (newStatus === student.status) return;
+    if (!window.confirm(`Change student status to ${newStatus}?`)) return;
     try {
       const response = await apiFetch(`/students/${student.id}/status`, {
         method: "PATCH",
@@ -56,6 +73,22 @@ export default function StudentProfile() {
     }
   };
 
+  const handleMarkCollected = async (certId) => {
+    if (!window.confirm("Mark this certificate as collected?")) return;
+    try {
+      const response = await apiFetch(`/certificates/${certId}/collect`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          collection_date: new Date().toISOString().split("T")[0],
+        }),
+      });
+      if (response.ok) fetchStudent();
+      else alert("Failed to mark as collected.");
+    } catch {
+      alert("Could not connect to server.");
+    }
+  };
+
   if (loading) return <Layout><div style={styles.center}>Loading...</div></Layout>;
   if (error) return <Layout><div style={styles.center}>{error}</div></Layout>;
 
@@ -63,34 +96,42 @@ export default function StudentProfile() {
 
   const statusColor = {
     Active: { bg: "#dcfce7", text: "#166534" },
-    Inactive: { bg: "#fee2e2", text: "#991b1b" },
-    Graduated: { bg: "#dbeafe", text: "#1e3a8a" },
+    Completed: { bg: "#dbeafe", text: "#1e3a8a" },
     Suspended: { bg: "#fef9c3", text: "#854d0e" },
     Withdrawn: { bg: "#fee2e2", text: "#991b1b" },
   }[student.status] || { bg: "#f3f4f6", text: "#374151" };
 
+  const enrolStatusColor = (s) => ({
+    Active: { bg: "#dcfce7", text: "#166534" },
+    Completed: { bg: "#dbeafe", text: "#1e3a8a" },
+    Withdrawn: { bg: "#fee2e2", text: "#991b1b" },
+  }[s] || { bg: "#f3f4f6", text: "#374151" });
+
+  const isSystemManaged = student.status === "Active" || student.status === "Completed";
+
   return (
     <Layout>
       <div style={styles.container}>
+
         {/* Top bar */}
         <div style={styles.topBar}>
-          <button style={styles.backBtn} onClick={() => navigate("/students")}>← Back to Students</button>
+          <button style={styles.backBtn} onClick={() => navigate("/students")}>
+            ← Back to Students
+          </button>
           {(role === "Admin" || role === "DB Admin") && (
             <div style={styles.actionRow}>
-              <Link to={`/students/edit/${student.id}`}>
-                <button style={styles.editBtn}>Edit</button>
-              </Link>
-              <select
-                style={styles.statusSelect}
-                value={student.status}
-                onChange={(e) => handleStatusChange(e.target.value)}
-              >
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-                <option value="Graduated">Graduated</option>
-                <option value="Suspended">Suspended</option>
-                <option value="Withdrawn">Withdrawn</option>
-              </select>
+              {isSystemManaged ? (
+                <span style={styles.managedBadge}>Status managed automatically</span>
+              ) : (
+                <select
+                  style={styles.statusSelect}
+                  value={student.status}
+                  onChange={(e) => handleStatusChange(e.target.value)}
+                >
+                  <option value="Suspended">Suspended</option>
+                  <option value="Withdrawn">Withdrawn</option>
+                </select>
+              )}
             </div>
           )}
         </div>
@@ -100,13 +141,23 @@ export default function StudentProfile() {
           <div style={styles.profileHeader}>
             <div style={styles.avatar}>{initials}</div>
             <div>
-              <h1 style={styles.name}>{student.first_name} {student.other_name || ""} {student.last_name}</h1>
+              <h1 style={styles.name}>
+                {student.first_name} {student.other_name || ""} {student.last_name}
+              </h1>
               <p style={styles.studentNo}>{student.student_no}</p>
               <span style={{ ...styles.badge, background: statusColor.bg, color: statusColor.text }}>
                 {student.status}
               </span>
-              {student.sen && <span style={{ ...styles.badge, background: "#fef9c3", color: "#854d0e", marginLeft: "8px" }}>SEN</span>}
-              {student.ovc && <span style={{ ...styles.badge, background: "#f3e8ff", color: "#6b21a8", marginLeft: "8px" }}>OVC</span>}
+              {student.sen && (
+                <span style={{ ...styles.badge, background: "#fef9c3", color: "#854d0e", marginLeft: "8px" }}>
+                  SEN
+                </span>
+              )}
+              {student.ovc && (
+                <span style={{ ...styles.badge, background: "#f3e8ff", color: "#6b21a8", marginLeft: "8px" }}>
+                  OVC
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -125,6 +176,47 @@ export default function StudentProfile() {
             </div>
           ))}
         </div>
+
+        {/* Attendance by module */}
+        {attendance.length > 0 && (
+          <div style={styles.section}>
+            <h3 style={styles.sectionTitle}>Attendance by Module</h3>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>Module</th>
+                  <th style={styles.th}>Sessions</th>
+                  <th style={styles.th}>Hours Attended</th>
+                  <th style={styles.th}>Required</th>
+                  <th style={styles.th}>Threshold</th>
+                  <th style={styles.th}>Attendance %</th>
+                  <th style={styles.th}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {attendance.map((a, i) => (
+                  <tr key={i}>
+                    <td style={styles.td}>{a.module_name}</td>
+                    <td style={styles.td}>{a.total_sessions}</td>
+                    <td style={styles.td}>{a.hours_attended} hrs</td>
+                    <td style={styles.td}>{a.required_hours} hrs</td>
+                    <td style={styles.td}>{a.attendance_threshold} hrs ({a.threshold_percentage}%)</td>
+                    <td style={styles.td}>{a.attendance_percentage}%</td>
+                    <td style={styles.td}>
+                      <span style={{
+                        ...styles.badge,
+                        background: a.at_risk ? "#fee2e2" : "#dcfce7",
+                        color: a.at_risk ? "#991b1b" : "#166534",
+                      }}>
+                        {a.at_risk ? "At Risk" : "On Track"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* Personal details */}
         <div style={styles.section}>
@@ -165,7 +257,7 @@ export default function StudentProfile() {
           </div>
         </div>
 
-        {/* Academic */}
+        {/* Academic background */}
         <div style={styles.section}>
           <h3 style={styles.sectionTitle}>Academic Background</h3>
           <div style={styles.grid}>
@@ -191,7 +283,7 @@ export default function StudentProfile() {
           </div>
         </div>
 
-        {/* Next of Kin */}
+        {/* Next of kin */}
         {student.next_of_kin && (
           <div style={styles.section}>
             <h3 style={styles.sectionTitle}>Next of Kin</h3>
@@ -230,25 +322,28 @@ export default function StudentProfile() {
                 <tr>
                   <th style={styles.th}>Course</th>
                   <th style={styles.th}>Enrolment Date</th>
+                  <th style={styles.th}>Completion Date</th>
                   <th style={styles.th}>Status</th>
                   <th style={styles.th}>Certificate</th>
                 </tr>
               </thead>
               <tbody>
-                {enrolments.map((e) => (
-                  <tr key={e.id}>
-                    <td style={styles.td}>{e.course_name}</td>
-                    <td style={styles.td}>{e.enrolment_date}</td>
-                    <td style={styles.td}>
-                      <span style={{
-                        ...styles.badge,
-                        background: e.status === "Active" ? "#dcfce7" : e.status === "Completed" ? "#dbeafe" : "#fee2e2",
-                        color: e.status === "Active" ? "#166534" : e.status === "Completed" ? "#1e3a8a" : "#991b1b",
-                      }}>{e.status}</span>
-                    </td>
-                    <td style={styles.td}>{e.has_certificate ? "✓ Issued" : "—"}</td>
-                  </tr>
-                ))}
+                {enrolments.map((e) => {
+                  const ec = enrolStatusColor(e.status);
+                  return (
+                    <tr key={e.id}>
+                      <td style={styles.td}>{e.course_name}</td>
+                      <td style={styles.td}>{e.enrolment_date}</td>
+                      <td style={styles.td}>{e.completion_date || "—"}</td>
+                      <td style={styles.td}>
+                        <span style={{ ...styles.badge, background: ec.bg, color: ec.text }}>
+                          {e.status}
+                        </span>
+                      </td>
+                      <td style={styles.td}>{e.has_certificate ? "✓ Issued" : "—"}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -265,8 +360,11 @@ export default function StudentProfile() {
                 <tr>
                   <th style={styles.th}>Course</th>
                   <th style={styles.th}>Issue Date</th>
-                  <th style={styles.th}>Collected</th>
+                  <th style={styles.th}>Status</th>
                   <th style={styles.th}>Collection Date</th>
+                  {(role === "Admin" || role === "DB Admin") && (
+                    <th style={styles.th}>Action</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -279,15 +377,34 @@ export default function StudentProfile() {
                         ...styles.badge,
                         background: c.collected ? "#dcfce7" : "#fee2e2",
                         color: c.collected ? "#166534" : "#991b1b",
-                      }}>{c.collected ? "Yes" : "No"}</span>
+                      }}>
+                        {c.collected ? "✓ Collected" : "Not Collected"}
+                      </span>
                     </td>
                     <td style={styles.td}>{c.collection_date || "—"}</td>
+                    {(role === "Admin" || role === "DB Admin") && (
+                      <td style={styles.td}>
+                        {!c.collected ? (
+                          <button
+                            style={styles.collectBtn}
+                            onClick={() => handleMarkCollected(c.id)}
+                          >
+                            Mark Collected
+                          </button>
+                        ) : (
+                          <span style={{ color: "#166534", fontWeight: "600", fontSize: "13px" }}>
+                            ✓ Done
+                          </span>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
         </div>
+
       </div>
     </Layout>
   );
@@ -298,8 +415,8 @@ const styles = {
   topBar: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" },
   backBtn: { background: "none", border: "none", color: "#1e3a8a", cursor: "pointer", fontSize: "14px", fontWeight: "600" },
   actionRow: { display: "flex", gap: "10px", alignItems: "center" },
-  editBtn: { background: "#2563eb", color: "#fff", border: "none", padding: "8px 16px", borderRadius: "8px", cursor: "pointer" },
-  statusSelect: { padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: "8px", cursor: "pointer" },
+  managedBadge: { background: "#f3f4f6", color: "#6b7280", padding: "8px 12px", borderRadius: "8px", fontSize: "13px" },
+  statusSelect: { padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: "8px", cursor: "pointer", fontSize: "14px" },
   profileCard: { background: "#fff", padding: "25px", borderRadius: "12px", marginBottom: "20px", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" },
   profileHeader: { display: "flex", gap: "20px", alignItems: "center" },
   avatar: { width: "90px", height: "90px", background: "#1e3a8a", color: "#fff", borderRadius: "50%", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "30px", fontWeight: "700", flexShrink: 0 },
@@ -319,6 +436,7 @@ const styles = {
   th: { textAlign: "left", padding: "10px", borderBottom: "2px solid #f3f4f6", color: "#6b7280", fontSize: "13px" },
   td: { padding: "12px 10px", borderBottom: "1px solid #f3f4f6", fontSize: "14px" },
   smallAddBtn: { background: "#1e3a8a", color: "#fff", border: "none", padding: "6px 12px", borderRadius: "6px", cursor: "pointer", fontSize: "13px" },
-  empty: { color: "#6b7280", fontSize: "14px" },
+  collectBtn: { background: "#16a34a", color: "#fff", border: "none", padding: "6px 12px", borderRadius: "6px", cursor: "pointer", fontSize: "13px" },
+  empty: { color: "#6b7280", fontSize: "14px", margin: 0 },
   center: { display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", color: "#6b7280" },
 };

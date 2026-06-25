@@ -154,7 +154,12 @@ export default function Dashboard() {
                   <Link to="/certificates"><button style={styles.actionBtn}>Certificate Collection</button></Link>
                 </>
               )}
-              <Link to="/attendance"><button style={styles.actionBtn}>Attendance</button></Link>
+              <Link to="/attendance">
+  <button style={styles.actionBtn}>Mark Attendance</button>
+</Link>
+<Link to="/attendance/analytics">
+  <button style={styles.actionBtn}>Attendance Analytics</button>
+</Link>
               <Link to="/reports"><button style={styles.actionBtn}>Reports</button></Link>
               {role === "DB Admin" && (
                 <>

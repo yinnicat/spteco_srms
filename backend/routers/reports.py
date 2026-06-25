@@ -141,6 +141,19 @@ def get_uncollected_certificates(
         ]
     }
 
+def calc_at_risk(hours_attended, total_hours, required_hours, threshold_hours):
+    """
+    At risk = attended percentage is below threshold percentage.
+    Both are expressed as a fraction of their respective totals
+    so early-semester data doesn't falsely flag everyone.
+    If no sessions yet, not at risk.
+    """
+    if total_hours <= 0 or required_hours <= 0:
+        return False
+    attended_pct = hours_attended / total_hours
+    threshold_pct = threshold_hours / required_hours
+    return attended_pct < threshold_pct
+
 @router.get("/attendance-report")
 def get_attendance_report(
     module_id: int,
@@ -152,6 +165,7 @@ def get_attendance_report(
     module = db.query(models.Module).filter(models.Module.id == module_id).first()
     if not module:
         return {"error": "Module not found"}
+
     session_query = db.query(models.Session).filter(models.Session.module_id == module_id)
     if semester:
         session_query = session_query.filter(models.Session.semester == semester)
@@ -160,12 +174,17 @@ def get_attendance_report(
     sessions = session_query.all()
     session_ids = [s.id for s in sessions]
     total_hours = sum(float(s.duration_hours) for s in sessions)
+
     students = db.query(models.Student).join(
         models.Enrolment, models.Enrolment.student_id == models.Student.id
     ).filter(
         models.Enrolment.course_id == module.course_id,
         models.Enrolment.status == "Active"
     ).all()
+
+    required_hours = float(module.required_hours)
+    threshold_hours = float(module.attendance_threshold)
+
     report = []
     for student in students:
         attended = db.query(models.Attendance).filter(
@@ -185,9 +204,12 @@ def get_attendance_report(
             "hours_attended": hours_attended,
             "total_hours": total_hours,
             "attendance_percentage": percentage,
-            "attendance_threshold": float(module.attendance_threshold),
-            "at_risk": hours_attended < float(module.attendance_threshold),
+            "required_hours": required_hours,
+            "attendance_threshold": threshold_hours,
+            "threshold_percentage": round(threshold_hours / required_hours * 100, 1) if required_hours > 0 else 80,
+            "at_risk": calc_at_risk(hours_attended, total_hours, required_hours, threshold_hours),
         })
+
     return {
         "module_name": module.module_name,
         "module_code": module.module_code,
@@ -195,5 +217,7 @@ def get_attendance_report(
         "academic_year": academic_year,
         "total_sessions": len(sessions),
         "total_hours": total_hours,
+        "required_hours": required_hours,
+        "threshold_percentage": round(threshold_hours / required_hours * 100, 1) if required_hours > 0 else 80,
         "students": sorted(report, key=lambda x: x["attendance_percentage"])
     }

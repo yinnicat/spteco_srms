@@ -30,13 +30,25 @@ def calculate_duration(start: time, end: time) -> float:
     diff = (end_dt - start_dt).seconds / 3600
     return round(diff, 2)
 
+def calc_at_risk(hours_attended, total_hours, required_hours, threshold_hours):
+    """
+    At risk based on current attendance rate vs threshold rate.
+    Compares proportion attended so far against proportion required.
+    Not at risk if no sessions yet.
+    """
+    if total_hours <= 0 or required_hours <= 0:
+        return False
+    attended_pct = hours_attended / total_hours
+    threshold_pct = threshold_hours / required_hours
+    return attended_pct < threshold_pct
+
 class SessionCreate(BaseModel):
     module_id: int
     date: date
     start_time: time
     end_time: time
     room: Optional[str] = None
-    semester: Optional[str] = None  # Override — if not provided, auto-detected
+    semester: Optional[str] = None
 
 class AttendanceRecord(BaseModel):
     student_id: int
@@ -80,7 +92,7 @@ def get_sessions(
         query = query.filter(models.Session.semester == semester)
     if academic_year:
         query = query.filter(models.Session.academic_year == academic_year)
-    return [format_session(s) for s in query.all()]
+    return [format_session(s) for s in query.order_by(models.Session.date.desc()).all()]
 
 @router.post("/sessions", status_code=status.HTTP_201_CREATED)
 def create_session(
@@ -94,10 +106,7 @@ def create_session(
     if data.end_time <= data.start_time:
         raise HTTPException(status_code=400, detail="End time must be after start time")
 
-    # Auto-detect semester and academic year from date
     auto_semester, auto_academic_year = get_semester_and_year(data.date)
-
-    # Allow override for semester only
     final_semester = data.semester if data.semester else auto_semester
     if final_semester not in VALID_SEMESTERS:
         raise HTTPException(status_code=400, detail=f"Semester must be one of {VALID_SEMESTERS}")
@@ -131,7 +140,7 @@ def delete_session(
         raise HTTPException(status_code=404, detail="Session not found")
     db.delete(session)
     db.commit()
-    return {"message": "Session deleted. All attendance records for this session have been removed."}
+    return {"message": "Session deleted."}
 
 @router.get("/sessions/{session_id}/students")
 def get_students_for_session(
@@ -142,21 +151,19 @@ def get_students_for_session(
     session = db.query(models.Session).filter(models.Session.id == session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    
-    # Get all students enrolled in this module's course
+
     students = db.query(models.Student).join(
         models.Enrolment, models.Enrolment.student_id == models.Student.id
     ).filter(
         models.Enrolment.course_id == session.module.course_id,
         models.Enrolment.status == "Active"
     ).all()
-    
-    # Check if attendance already marked for each student
+
     existing_attendance = db.query(models.Attendance).filter(
         models.Attendance.session_id == session_id
     ).all()
     attendance_map = {a.student_id: a.status for a in existing_attendance}
-    
+
     return {
         "session_id": session_id,
         "module_name": session.module.module_name,
@@ -173,6 +180,7 @@ def get_students_for_session(
             } for s in students
         ]
     }
+
 # ─── Attendance ────────────────────────────────────────────────────────────────
 
 @router.post("/sessions/{session_id}/mark", status_code=status.HTTP_201_CREATED)
@@ -251,6 +259,7 @@ def get_attendance_summary(
     module = db.query(models.Module).filter(models.Module.id == module_id).first()
     if not module:
         raise HTTPException(status_code=404, detail="Module not found")
+
     session_query = db.query(models.Session).filter(models.Session.module_id == module_id)
     if semester:
         session_query = session_query.filter(models.Session.semester == semester)
@@ -259,6 +268,7 @@ def get_attendance_summary(
     sessions = session_query.all()
     session_ids = [s.id for s in sessions]
     total_hours = sum(float(s.duration_hours) for s in sessions)
+
     attended = db.query(models.Attendance).filter(
         models.Attendance.session_id.in_(session_ids),
         models.Attendance.student_id == student_id,
@@ -268,23 +278,28 @@ def get_attendance_summary(
         float(next(s.duration_hours for s in sessions if s.id == a.session_id))
         for a in attended
     )
-    threshold = float(module.attendance_threshold)
+
+    required_hours = float(module.required_hours)
+    threshold_hours = float(module.attendance_threshold)
     percentage = round((hours_attended / total_hours * 100), 1) if total_hours > 0 else 0
+
     return {
         "student_id": student_id,
         "student_name": f"{student.first_name} {student.last_name}",
         "student_no": student.student_no,
         "module_id": module_id,
         "module_name": module.module_name,
+        "module_code": module.module_code,
         "semester": semester,
         "academic_year": academic_year,
         "total_sessions": len(sessions),
         "total_hours": total_hours,
         "hours_attended": hours_attended,
         "attendance_percentage": percentage,
-        "required_hours": float(module.required_hours),
-        "attendance_threshold": threshold,
-        "at_risk": hours_attended < threshold,
+        "required_hours": required_hours,
+        "attendance_threshold": threshold_hours,
+        "threshold_percentage": round(threshold_hours / required_hours * 100, 1) if required_hours > 0 else 80,
+        "at_risk": calc_at_risk(hours_attended, total_hours, required_hours, threshold_hours),
     }
 
 @router.get("/at-risk")
@@ -299,6 +314,7 @@ def get_at_risk_students(
     if module_id:
         modules_query = modules_query.filter(models.Module.id == module_id)
     modules = modules_query.all()
+
     at_risk = []
     for module in modules:
         session_query = db.query(models.Session).filter(models.Session.module_id == module.id)
@@ -309,14 +325,19 @@ def get_at_risk_students(
         sessions = session_query.all()
         if not sessions:
             continue
+
         session_ids = [s.id for s in sessions]
         total_hours = sum(float(s.duration_hours) for s in sessions)
+        required_hours = float(module.required_hours)
+        threshold_hours = float(module.attendance_threshold)
+
         students_in_module = db.query(models.Student).join(
             models.Enrolment, models.Enrolment.student_id == models.Student.id
         ).filter(
             models.Enrolment.course_id == module.course_id,
             models.Enrolment.status == "Active"
         ).all()
+
         for student in students_in_module:
             attended = db.query(models.Attendance).filter(
                 models.Attendance.session_id.in_(session_ids),
@@ -327,7 +348,7 @@ def get_at_risk_students(
                 float(next(s.duration_hours for s in sessions if s.id == a.session_id))
                 for a in attended
             )
-            if hours_attended < float(module.attendance_threshold):
+            if calc_at_risk(hours_attended, total_hours, required_hours, threshold_hours):
                 percentage = round((hours_attended / total_hours * 100), 1) if total_hours > 0 else 0
                 at_risk.append({
                     "student_id": student.id,
@@ -336,7 +357,10 @@ def get_at_risk_students(
                     "module_id": module.id,
                     "module_name": module.module_name,
                     "hours_attended": hours_attended,
-                    "attendance_threshold": float(module.attendance_threshold),
+                    "total_hours": total_hours,
+                    "required_hours": required_hours,
+                    "attendance_threshold": threshold_hours,
+                    "threshold_percentage": round(threshold_hours / required_hours * 100, 1),
                     "attendance_percentage": percentage,
                 })
     return at_risk

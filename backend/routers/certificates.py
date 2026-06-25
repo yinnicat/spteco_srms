@@ -9,14 +9,9 @@ from datetime import date
 
 router = APIRouter(prefix="/certificates", tags=["Certificates"])
 
-class CertificateCreate(BaseModel):
-    enrolment_id: int
-    issue_date: date
-    notes: Optional[str] = None
-
 class CertificateCollect(BaseModel):
-    collection_date: date
-    confirmed_by: int
+    collection_date: Optional[date] = None
+    confirmed_by: Optional[int] = None
     notes: Optional[str] = None
 
 def format_certificate(c):
@@ -34,6 +29,21 @@ def format_certificate(c):
         "notes": c.notes,
         "created_at": c.created_at,
     }
+
+def auto_issue_certificate(enrolment_id: int, db: Session):
+    """Auto-issue a certificate when an enrolment is marked Completed."""
+    existing = db.query(models.CertificateIssuance).filter(
+        models.CertificateIssuance.enrolment_id == enrolment_id
+    ).first()
+    if existing:
+        return  # Already issued
+    cert = models.CertificateIssuance(
+        enrolment_id=enrolment_id,
+        issue_date=date.today(),
+        collected=False,
+    )
+    db.add(cert)
+    # Don't commit here — caller handles the transaction
 
 @router.get("/")
 def get_certificates(
@@ -79,28 +89,6 @@ def get_certificate(
         raise HTTPException(status_code=404, detail="Certificate not found")
     return format_certificate(c)
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
-def issue_certificate(
-    data: CertificateCreate,
-    db: Session = Depends(get_db),
-    current_user: models.SystemUser = Depends(require_roles("Admin", "DB Admin"))
-):
-    enrolment = db.query(models.Enrolment).filter(models.Enrolment.id == data.enrolment_id).first()
-    if not enrolment:
-        raise HTTPException(status_code=404, detail="Enrolment not found")
-    if enrolment.status != "Completed":
-        raise HTTPException(status_code=400, detail="Certificate can only be issued for completed enrolments")
-    existing = db.query(models.CertificateIssuance).filter(
-        models.CertificateIssuance.enrolment_id == data.enrolment_id
-    ).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Certificate already issued for this enrolment")
-    cert = models.CertificateIssuance(**data.dict())
-    db.add(cert)
-    db.commit()
-    db.refresh(cert)
-    return format_certificate(cert)
-
 @router.patch("/{cert_id}/collect")
 def mark_collected(
     cert_id: int,
@@ -113,14 +101,32 @@ def mark_collected(
         raise HTTPException(status_code=404, detail="Certificate not found")
     if c.collected:
         raise HTTPException(status_code=400, detail="Certificate already marked as collected")
-    staff = db.query(models.Staff).filter(models.Staff.id == data.confirmed_by).first()
-    if not staff:
-        raise HTTPException(status_code=404, detail="Confirming staff member not found")
     c.collected = True
-    c.collection_date = data.collection_date
-    c.confirmed_by = data.confirmed_by
+    c.collection_date = data.collection_date or date.today()
+    if data.confirmed_by:
+        staff = db.query(models.Staff).filter(models.Staff.id == data.confirmed_by).first()
+        if not staff:
+            raise HTTPException(status_code=404, detail="Confirming staff member not found")
+        c.confirmed_by = data.confirmed_by
     if data.notes:
         c.notes = data.notes
+    db.commit()
+    db.refresh(c)
+    return format_certificate(c)
+
+@router.patch("/{cert_id}/uncollect")
+def mark_uncollected(
+    cert_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.SystemUser = Depends(require_roles("Admin", "DB Admin"))
+):
+    """Undo a collection mark in case of error."""
+    c = db.query(models.CertificateIssuance).filter(models.CertificateIssuance.id == cert_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Certificate not found")
+    c.collected = False
+    c.collection_date = None
+    c.confirmed_by = None
     db.commit()
     db.refresh(c)
     return format_certificate(c)
