@@ -33,6 +33,7 @@ export default function Attendance() {
 
   const fetchModules = async () => {
     try {
+      // Backend auto-filters by lecturer if role is Lecturer
       const response = await apiFetch("/modules/?is_active=true");
       if (response.status === 401) { localStorage.clear(); navigate("/"); return; }
       const data = await response.json();
@@ -43,6 +44,7 @@ export default function Attendance() {
   const fetchPastSessions = async () => {
     setLoadingPast(true);
     try {
+      // Lecturers see sessions they marked, admins see all
       const response = await apiFetch("/attendance/sessions");
       const data = await response.json();
       setPastSessions(data.slice(0, 20));
@@ -84,7 +86,10 @@ export default function Attendance() {
           <div>
             <h1>Mark Attendance</h1>
             <p style={{ color: "#6b7280", margin: "6px 0 0 0" }}>
-              Create a session and mark attendance in one go
+              {role === "Lecturer"
+                ? "Create a session for your modules and mark attendance"
+                : "Create a session and mark attendance in one go"
+              }
             </p>
           </div>
           <div style={styles.headerLinks}>
@@ -120,67 +125,57 @@ export default function Attendance() {
                   <option value="">Select module</option>
                   {modules.map(m => (
                     <option key={m.id} value={m.id}>
-                      {m.module_code} — {m.module_name}
+                      {m.module_code} — {m.module_name} {m.course_name ? `(${m.course_name})` : ""}
                     </option>
                   ))}
                 </select>
+                {modules.length === 0 && (
+                  <p style={{ color: "#dc2626", fontSize: "13px", margin: "4px 0 0 0" }}>
+                    No modules available. {role === "Lecturer" ? "You have no assigned modules yet." : "Please add modules first."}
+                  </p>
+                )}
               </div>
 
               <div style={styles.group}>
                 <label style={styles.label}>Date *</label>
-                <input
-                  type="date"
-                  value={form.date}
+                <input type="date" value={form.date}
                   onChange={e => setForm({ ...form, date: e.target.value })}
-                  style={styles.input} required
-                />
+                  style={styles.input} required />
               </div>
 
               <div style={styles.group}>
                 <label style={styles.label}>Room <span style={styles.optional}>(optional)</span></label>
-                <input
-                  type="text"
-                  value={form.room}
+                <input type="text" value={form.room}
                   onChange={e => setForm({ ...form, room: e.target.value })}
-                  placeholder="e.g. Lab A"
-                  style={styles.input}
-                />
+                  placeholder="e.g. Lab A" style={styles.input} />
               </div>
 
               <div style={styles.group}>
                 <label style={styles.label}>Start Time *</label>
-                <input
-                  type="time"
-                  value={form.start_time}
+                <input type="time" value={form.start_time}
                   onChange={e => {
                     const start = e.target.value;
                     const [h, m] = start.split(":").map(Number);
                     const endH = String(Math.min(h + 1, 23)).padStart(2, "0");
                     setForm({ ...form, start_time: start, end_time: `${endH}:${String(m).padStart(2, "0")}` });
                   }}
-                  style={styles.input} required
-                />
+                  style={styles.input} required />
               </div>
 
               <div style={styles.group}>
                 <label style={styles.label}>End Time *</label>
-                <input
-                  type="time"
-                  value={form.end_time}
+                <input type="time" value={form.end_time}
                   onChange={e => setForm({ ...form, end_time: e.target.value })}
-                  style={styles.input} required
-                />
+                  style={styles.input} required />
               </div>
 
               <div style={{ ...styles.group, gridColumn: "span 2" }}>
                 <label style={styles.label}>
                   Semester <span style={styles.optional}>(override if needed)</span>
                 </label>
-                <select
-                  value={form.semester}
+                <select value={form.semester}
                   onChange={e => setForm({ ...form, semester: e.target.value })}
-                  style={styles.input}
-                >
+                  style={styles.input}>
                   <option value="Semester 1">Semester 1</option>
                   <option value="Semester 2">Semester 2</option>
                   <option value="Inter-semester">Inter-semester</option>
@@ -191,7 +186,7 @@ export default function Attendance() {
             <button
               type="submit"
               style={{ ...styles.submitBtn, opacity: saving ? 0.7 : 1 }}
-              disabled={saving}
+              disabled={saving || modules.length === 0}
             >
               {saving ? "Creating session..." : "Create Session & Mark Attendance →"}
             </button>

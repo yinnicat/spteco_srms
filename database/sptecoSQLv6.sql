@@ -1,11 +1,14 @@
 -- ============================================================================
 -- SELEBI-PHIKWE TECHNICAL COLLEGE (SPTECO)
 -- STUDENT RECORDS MANAGEMENT SYSTEM (SRMS) - PRODUCTION MASTER SCHEMA
--- POSTGRESQL COMPATIBLE | VERSION 7.0 | JUNE 2026
+-- POSTGRESQL COMPATIBLE | VERSION 8.0 | JUNE 2026
+-- ============================================================================
+-- Run this file on a fresh database to set up the full system.
+-- Default login after setup: username=admin password=admin123
 -- ============================================================================
 
 -- ============================================================================
--- CLEAN ENVIRONMENT RESET (Reverse Dependency Teardown Order)
+-- CLEAN ENVIRONMENT RESET
 -- ============================================================================
 DROP TABLE IF EXISTS audit_log CASCADE;
 DROP TABLE IF EXISTS attendance CASCADE;
@@ -22,7 +25,7 @@ DROP TABLE IF EXISTS courses CASCADE;
 DROP TABLE IF EXISTS departments CASCADE;
 
 -- ============================================================================
--- GLOBAL HELPER FUNCTIONS
+-- HELPER FUNCTIONS
 -- ============================================================================
 
 CREATE OR REPLACE FUNCTION update_modified_column()
@@ -41,7 +44,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ============================================================================
--- SCHEMA DEFINITION
+-- TABLES
 -- ============================================================================
 
 -- 1. DEPARTMENTS
@@ -116,7 +119,7 @@ CREATE TABLE next_of_kin (
     student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,
     surname VARCHAR(100) NOT NULL,
-    relationship VARCHAR(50) NOT NULL,
+    relation VARCHAR(50) NOT NULL,
     tel_no VARCHAR(50) NULL,
     cell_no VARCHAR(50) NULL,
     email VARCHAR(150) NULL
@@ -180,6 +183,10 @@ CREATE TABLE enrolments (
     )
 );
 
+CREATE UNIQUE INDEX uq_active_enrolment
+ON enrolments(student_id, course_id)
+WHERE status = 'Active';
+
 CREATE TRIGGER update_enrolments_modtime
     BEFORE UPDATE ON enrolments
     FOR EACH ROW EXECUTE FUNCTION update_modified_column();
@@ -223,7 +230,19 @@ CREATE TRIGGER update_modules_modtime
     BEFORE UPDATE ON modules
     FOR EACH ROW EXECUTE FUNCTION update_modified_column();
 
--- 10. SESSIONS
+-- 10. MODULE ASSIGNMENTS
+CREATE TABLE module_assignments (
+    id SERIAL PRIMARY KEY,
+    module_id INTEGER NOT NULL REFERENCES modules(id) ON DELETE RESTRICT,
+    lecturer_id INTEGER NOT NULL REFERENCES staff(id) ON DELETE RESTRICT,
+    academic_year VARCHAR(10) NOT NULL,
+    semester VARCHAR(20) NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_academic_year_format CHECK (academic_year ~ '^[0-9]{4}$')
+);
+
+-- 11. SESSIONS
 CREATE TABLE sessions (
     id SERIAL PRIMARY KEY,
     module_id INTEGER NOT NULL REFERENCES modules(id) ON DELETE RESTRICT,
@@ -240,19 +259,7 @@ CREATE TABLE sessions (
     CONSTRAINT chk_session_duration_positive CHECK (duration_hours > 0)
 );
 
--- 10.1 MODULE ASSIGNMENTS
-CREATE TABLE module_assignments (
-    id SERIAL PRIMARY KEY,
-    module_id INTEGER NOT NULL REFERENCES modules(id) ON DELETE RESTRICT,
-    lecturer_id INTEGER NOT NULL REFERENCES staff(id) ON DELETE RESTRICT,
-    academic_year VARCHAR(10) NOT NULL,
-    semester VARCHAR(20) NULL,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT chk_academic_year_format CHECK (academic_year ~ '^[0-9]{4}$')
-);
-
--- 11. ATTENDANCE
+-- 12. ATTENDANCE
 CREATE TABLE attendance (
     id SERIAL PRIMARY KEY,
     session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -265,7 +272,7 @@ CREATE TABLE attendance (
     CONSTRAINT chk_attendance_status CHECK (status IN ('Present', 'Absent', 'Late', 'Excused'))
 );
 
--- 12. AUDIT LOG
+-- 13. AUDIT LOG
 CREATE TABLE audit_log (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NULL REFERENCES system_users(id) ON DELETE SET NULL,
@@ -287,10 +294,6 @@ CREATE TRIGGER enforce_audit_immutability
 -- INDEXES
 -- ============================================================================
 
-CREATE UNIQUE INDEX uq_active_enrolment
-ON enrolments(student_id, course_id)
-WHERE status = 'Active';
-
 CREATE INDEX idx_attendance_student ON attendance(student_id);
 CREATE INDEX idx_attendance_session ON attendance(session_id);
 CREATE INDEX idx_sessions_module ON sessions(module_id);
@@ -305,3 +308,53 @@ CREATE INDEX idx_module_assignments_lecturer ON module_assignments(lecturer_id);
 CREATE INDEX idx_staff_department ON staff(department_id);
 CREATE INDEX idx_students_email ON students(email);
 CREATE INDEX idx_staff_email ON staff(email);
+
+-- ============================================================================
+-- SEED DATA
+-- ============================================================================
+
+-- Departments
+INSERT INTO departments (name) VALUES
+('Automobile'),
+('Business'),
+('Construction'),
+('Clothing Design and Textile'),
+('ICT and Key Skills'),
+('Electrical'),
+('Mechanical'),
+('Painting and Decoration'),
+('Bricklaying and Plastering'),
+('Plumbing and Pipe Fitting'),
+('Carpentry and Joinery');
+
+-- Courses
+INSERT INTO courses (course_code, course_name, course_level, duration_yrs, programme_type, department_id) VALUES
+('AUT-N3', 'Automotive Engineering', 3, 1, 'Long Term', (SELECT id FROM departments WHERE name = 'Automobile')),
+('AUT-N4', 'Automotive Engineering', 4, 1, 'Long Term', (SELECT id FROM departments WHERE name = 'Automobile')),
+('ELE-N3', 'Electrical Installation and Maintenance', 3, 1, 'Long Term', (SELECT id FROM departments WHERE name = 'Electrical')),
+('BRI-N3', 'Bricklaying and Plastering', 3, 1, 'Long Term', (SELECT id FROM departments WHERE name = 'Bricklaying and Plastering')),
+('BRI-N4', 'Bricklaying and Plastering', 4, 1, 'Long Term', (SELECT id FROM departments WHERE name = 'Bricklaying and Plastering')),
+('PAI-N3', 'Painting and Decoration', 3, 1, 'Long Term', (SELECT id FROM departments WHERE name = 'Painting and Decoration')),
+('CDT-N3', 'Clothing Design and Technology', 3, 1, 'Long Term', (SELECT id FROM departments WHERE name = 'Clothing Design and Textile')),
+('NCS', 'National Certificate in Secretarial Studies', NULL, 2, 'Long Term', (SELECT id FROM departments WHERE name = 'Business')),
+('CABS', 'Certificate in Accounting and Business Studies', NULL, 2, 'Long Term', (SELECT id FROM departments WHERE name = 'Business'));
+
+-- Default DB Admin account (password: admin123)
+INSERT INTO staff (staff_no, first_name, last_name, status)
+VALUES ('SPS-001', 'Admin', 'User', 'Active');
+
+INSERT INTO system_users (staff_id, username, password_hash, role, is_active)
+VALUES (
+    (SELECT id FROM staff WHERE staff_no = 'SPS-001'),
+    'admin',
+    '$2b$12$dMfDIef3.IV6fxdxTCYTAO18TxtkKzI..B2xTUlPSmMM1nN29EYNy',
+    'DB Admin',
+    TRUE
+);
+
+-- ============================================================================
+-- DONE
+-- ============================================================================
+-- Default login: username=admin | password=admin123
+-- Next step: run migrate.py to import historical student data
+-- ============================================================================

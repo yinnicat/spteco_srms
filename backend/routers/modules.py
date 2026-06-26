@@ -34,6 +34,7 @@ def format_module(m):
         "id": m.id,
         "course_id": m.course_id,
         "course_name": m.course.course_name if m.course else None,
+        "course_code": m.course.course_code if m.course else None,
         "module_code": m.module_code,
         "module_name": m.module_name,
         "required_hours": float(m.required_hours),
@@ -49,6 +50,7 @@ def format_module(m):
         "assignment_history": [
             {
                 "id": a.id,
+                "lecturer_id": a.lecturer_id,
                 "lecturer_name": f"{a.lecturer.first_name} {a.lecturer.last_name}",
                 "academic_year": a.academic_year,
                 "semester": a.semester,
@@ -61,15 +63,33 @@ def format_module(m):
 def get_modules(
     course_id: Optional[int] = Query(None),
     is_active: Optional[bool] = Query(None),
+    lecturer_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: models.SystemUser = Depends(get_current_user)
 ):
     query = db.query(models.Module)
+
     if course_id:
         query = query.filter(models.Module.course_id == course_id)
     if is_active is not None:
         query = query.filter(models.Module.is_active == is_active)
-    return [format_module(m) for m in query.all()]
+
+    # If lecturer_id provided — filter by assignment
+    # If current user is a Lecturer and no lecturer_id specified — auto-filter by their own staff_id
+    effective_lecturer_id = lecturer_id
+    if not effective_lecturer_id and current_user.role == "Lecturer":
+        effective_lecturer_id = current_user.staff_id
+
+    if effective_lecturer_id:
+        query = query.join(
+            models.ModuleAssignment,
+            models.ModuleAssignment.module_id == models.Module.id
+        ).filter(
+            models.ModuleAssignment.lecturer_id == effective_lecturer_id,
+            models.ModuleAssignment.is_active == True
+        )
+
+    return [format_module(m) for m in query.order_by(models.Module.module_name).all()]
 
 @router.get("/{module_id}")
 def get_module(
@@ -86,7 +106,7 @@ def get_module(
 def create_module(
     data: ModuleCreate,
     db: Session = Depends(get_db),
-    current_user: models.SystemUser = Depends(require_roles("Admin", "DB Admin", "Lecturer"))
+    current_user: models.SystemUser = Depends(require_roles("Admin", "DB Admin"))
 ):
     course = db.query(models.Course).filter(models.Course.id == data.course_id).first()
     if not course:
@@ -107,7 +127,7 @@ def update_module(
     module_id: int,
     data: ModuleUpdate,
     db: Session = Depends(get_db),
-    current_user: models.SystemUser = Depends(require_roles("Admin", "DB Admin", "Lecturer"))
+    current_user: models.SystemUser = Depends(require_roles("Admin", "DB Admin"))
 ):
     m = db.query(models.Module).filter(models.Module.id == module_id).first()
     if not m:
@@ -133,6 +153,7 @@ def assign_lecturer(
         raise HTTPException(status_code=404, detail="Lecturer not found")
     if not data.academic_year.isdigit() or len(data.academic_year) != 4:
         raise HTTPException(status_code=400, detail="Academic year must be a 4-digit year e.g. 2026")
+
     # Deactivate current active assignment
     current = db.query(models.ModuleAssignment).filter(
         models.ModuleAssignment.module_id == module_id,
@@ -140,7 +161,7 @@ def assign_lecturer(
     ).first()
     if current:
         current.is_active = False
-    # Create new assignment
+
     assignment = models.ModuleAssignment(
         module_id=module_id,
         lecturer_id=data.lecturer_id,
@@ -152,6 +173,61 @@ def assign_lecturer(
     db.commit()
     db.refresh(module)
     return format_module(module)
+
+@router.post("/{module_id}/assign-additional", status_code=status.HTTP_201_CREATED)
+def assign_additional_lecturer(
+    module_id: int,
+    data: ModuleAssignmentCreate,
+    db: Session = Depends(get_db),
+    current_user: models.SystemUser = Depends(require_roles("Admin", "DB Admin"))
+):
+    """Add an additional lecturer to a module without replacing the current one.
+    Use this for team teaching or substitutes."""
+    module = db.query(models.Module).filter(models.Module.id == module_id).first()
+    if not module:
+        raise HTTPException(status_code=404, detail="Module not found")
+    lecturer = db.query(models.Staff).filter(models.Staff.id == data.lecturer_id).first()
+    if not lecturer:
+        raise HTTPException(status_code=404, detail="Lecturer not found")
+
+    # Check if already assigned
+    existing = db.query(models.ModuleAssignment).filter(
+        models.ModuleAssignment.module_id == module_id,
+        models.ModuleAssignment.lecturer_id == data.lecturer_id,
+        models.ModuleAssignment.is_active == True
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Lecturer already assigned to this module")
+
+    assignment = models.ModuleAssignment(
+        module_id=module_id,
+        lecturer_id=data.lecturer_id,
+        academic_year=data.academic_year,
+        semester=data.semester,
+        is_active=True
+    )
+    db.add(assignment)
+    db.commit()
+    db.refresh(module)
+    return format_module(module)
+
+@router.delete("/{module_id}/assign/{assignment_id}")
+def remove_assignment(
+    module_id: int,
+    assignment_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.SystemUser = Depends(require_roles("Admin", "DB Admin"))
+):
+    """Deactivate a specific lecturer assignment — use this to remove a substitute."""
+    assignment = db.query(models.ModuleAssignment).filter(
+        models.ModuleAssignment.id == assignment_id,
+        models.ModuleAssignment.module_id == module_id
+    ).first()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    assignment.is_active = False
+    db.commit()
+    return {"message": "Assignment removed"}
 
 @router.get("/{module_id}/assignments")
 def get_assignment_history(
@@ -165,6 +241,7 @@ def get_assignment_history(
     return [
         {
             "id": a.id,
+            "lecturer_id": a.lecturer_id,
             "lecturer_name": f"{a.lecturer.first_name} {a.lecturer.last_name}",
             "academic_year": a.academic_year,
             "semester": a.semester,
